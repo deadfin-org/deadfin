@@ -92,7 +92,7 @@ func itemQueryAccessClause(relation *itemQueryIDRelation, query ItemQuery, alias
 		topParentFolders := itemQueryAccessUUIDList(relation, policy.EnabledFolders)
 		itemFolders := itemQueryAccessUUIDList(relation, policy.EnabledFolders)
 		ancestorFolders := itemQueryAccessUUIDList(relation, policy.EnabledFolders)
-		clauses = append(clauses, "("+alias+".kind = '"+playlistKind+"' OR ("+alias+".top_parent_id IN ("+topParentFolders+") OR "+alias+".id IN ("+itemFolders+") OR EXISTS (SELECT 1 FROM ancestors AS policy_ancestor WHERE policy_ancestor.item_id = "+alias+".id AND policy_ancestor.ancestor_id IN ("+ancestorFolders+"))))")
+		clauses = append(clauses, "("+alias+".kind = '"+playlistKind+"' OR ("+alias+".top_parent_id IN ("+topParentFolders+") OR "+alias+".id IN ("+itemFolders+") OR EXISTS (SELECT 1 FROM ancestors AS policy_ancestor WHERE policy_ancestor.item_id = "+alias+".id AND policy_ancestor.ancestor_id IN ("+ancestorFolders+")))"+itemQueryAccessByNameClause(query, alias)+")")
 	}
 	clauses = append(clauses, itemQueryAccessTagClause(relation, alias, policy.BlockedTags, true))
 	clauses = append(clauses, itemQueryAccessTagClause(relation, alias, policy.AllowedTags, false))
@@ -114,6 +114,25 @@ func itemQueryAccessClause(relation *itemQueryIDRelation, query ItemQuery, alias
 		clauses = append(clauses, "("+alias+".inherited_parental_rating_value IS NOT NULL OR "+alias+".unrated_type IS NULL OR "+alias+".unrated_type NOT IN ("+strings.Join(values, ", ")+"))")
 	}
 	return strings.Join(itemQueryNonEmptyClauses(clauses), " AND ")
+}
+
+// itemQueryAccessByNameKinds lists the item-by-name kinds of upstream
+// BaseItemRepository.GetItemByNameTypesInQuery as an SQL value list.
+const itemQueryAccessByNameKinds = "'Person', 'Genre', 'MusicGenre', 'MusicArtist', 'Studio'"
+
+// itemQueryAccessByNameClause admits an item-by-name with no library
+// ancestry to a restricted-folder user when the query names explicit item
+// IDs. Upstream BaseItem.IsVisibleStandalone checks folder access only for an
+// item with collection folders, and LibraryManager.AddUserToQuery adds no
+// TopParentIds scope to an ItemIds query. A Person, Genre or Studio has no
+// parent and no owner, so it has no collection folder. Other queries keep the
+// folder scope: upstream scopes them to the user's views, which these items
+// are not in. The parental-rating and tag clauses still apply.
+func itemQueryAccessByNameClause(query ItemQuery, alias string) string {
+	if len(query.ItemIDs) == 0 {
+		return ""
+	}
+	return " OR (" + alias + ".kind IN (" + itemQueryAccessByNameKinds + ") AND " + alias + ".parent_id IS NULL AND " + alias + ".owner_id IS NULL)"
 }
 
 // itemQueryAccessClauseArguments applies the shared visibility policy to a
