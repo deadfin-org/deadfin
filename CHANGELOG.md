@@ -82,6 +82,9 @@ v0.3.0 is the first public alpha of Deadfin.
 - The HLS throttler and the transcode cache limits pause ffmpeg again.
   jellyfin-ffmpeg 8 does not pause on the old key, so a fast remux kept writing
   segments far ahead of playback.
+- A user with access to only some libraries can open a person, genre or
+  studio by its ID, as upstream does. Cast portraits returned 404 for these
+  users. Lists keep the library restriction.
 
 ## [0.3.0-rc.3] - 2026-10-14
 
