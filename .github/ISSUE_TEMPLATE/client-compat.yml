@@ -17,8 +17,31 @@ body:
   - type: input
     id: client
     attributes:
-      label: Client
-      placeholder: Jellyfin Android TV 0.19 on Android TV 12
+      label: Client and version
+      placeholder: Swiftfin 1.3.0
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and OS
+      placeholder: Apple TV 4K (3rd gen), tvOS 26.0
+    validations:
+      required: true
+  - type: input
+    id: player
+    attributes:
+      label: Player
+      description: The client's video player, if it has more than one.
+      placeholder: Native (AVPlayer) or VLC
+  - type: dropdown
+    id: method
+    attributes:
+      label: Test method
+      options:
+        - Real app on a real device
+        - Real app in a simulator or emulator
+        - Request replay
     validations:
       required: true
   - type: checkboxes
