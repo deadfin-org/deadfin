@@ -2048,6 +2048,14 @@ func registerRoutes(rt *router.Router, services routeServices) {
 	handlers.RegisterAuth(rt, services.login, services.users, services.sessions, services.items, services.itemBuilder, services.identity, services.startup, services.network)
 	handlers.RegisterSessionLogout(rt, services.users, services.sessions, services.webSockets)
 	handlers.RegisterAPIKeys(rt, services.apiKeys, services.clock, rand.Reader)
+	handlers.RegisterClientLog(rt, handlers.ClientLogConfig{
+		Enabled: func() bool {
+			return services.manager != nil && services.manager.System().AllowClientLogUpload
+		},
+		LogDirectory: services.paths.Log,
+		Clock:        services.clock,
+		Random:       rand.Reader,
+	})
 	handlers.RegisterQuickConnect(rt, services.clock, func() bool { return services.manager != nil && services.manager.System().QuickConnectAvailable }, services.login, services.users, services.sessions, services.items, services.itemBuilder, services.identity)
 	handlers.RegisterDisplayPreferences(rt, services.displayPreferences)
 	handlers.RegisterItems(rt, services.items, services.itemBuilder, services.clock, handlers.ItemServices{Users: services.users, LatestPreferences: handlers.NewLatestUserPreferences(services.users), Languages: services.localization}, services.downloadFiles, services.manager)

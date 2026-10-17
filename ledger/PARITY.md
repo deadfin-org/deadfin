@@ -7,7 +7,7 @@ Edit `ledger/annotations.yaml` and `ledger/shadow-spec.yaml`, then run `make led
 
 - Deadfin revision: `539eb51ad60df4d96a3eab27fa52086d75dafbf2`
 - Jellyfin pin: `b04614e18d2aeed8d3d3de920c381c6bd5b97bdb`
-- Route count: 271
+- Route count: 272
 - OpenAPI version: 12.0.0
 
 ## Swiftfin REST parity
@@ -74,7 +74,7 @@ These SDK conveniences are not counted in the REST parity fraction:
 | Subtitle | 0 | 3 | 0 | 7 | 0 | 10 |
 | Suggestion | 0 | 0 | 0 | 1 | 0 | 1 |
 | SyncPlay | 0 | 0 | 22 | 0 | 0 | 22 |
-| System | 0 | 9 | 0 | 10 | 0 | 19 |
+| System | 0 | 10 | 0 | 9 | 0 | 19 |
 | Trailer | 0 | 0 | 0 | 1 | 0 | 1 |
 | TrickPlay | 0 | 2 | 0 | 0 | 0 | 2 |
 | User | 0 | 15 | 0 | 5 | 0 | 20 |
@@ -663,7 +663,7 @@ These SDK conveniences are not counted in the REST parity fraction:
 | GetSystemInfo | partial | — |
 | GetSystemStorage | partial | — |
 | GetUtcTime | deferred | deferred: UTC time endpoint not implemented |
-| LogFile | deferred | deferred: client log ingest not implemented |
+| LogFile | partial | — |
 | PostPingSystem | partial | — |
 | RestartApplication | deferred | deferred: server restart/shutdown not implemented |
 | ShutdownApplication | deferred | deferred: server restart/shutdown not implemented |
@@ -788,7 +788,7 @@ They use `status: stubbed` with `disposition: deferred` per decision D2.
 
 - OpenAPI operations: 364
 - Shadow routes: 55
-- Route snapshot routes: 271
+- Route snapshot routes: 272
 - Native routes (excluded from parity): 2
 - Duplicate operation IDs: 0
 - Unknown exported routes: 0

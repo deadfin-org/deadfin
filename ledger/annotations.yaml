@@ -393,10 +393,6 @@ operations:
     status: deferred
     reason: "deferred: named-entity image endpoints not implemented"
 
-  LogFile:
-    status: deferred
-    reason: "deferred: client log ingest not implemented"
-
   MergeVersions:
     status: deferred
     reason: "deferred: version merging not implemented"

@@ -2,7 +2,7 @@
   "source": {
     "deadfin_revision": "539eb51ad60df4d96a3eab27fa52086d75dafbf2",
     "jellyfin_pin": "b04614e18d2aeed8d3d3de920c381c6bd5b97bdb",
-    "route_count": 271,
+    "route_count": 272,
     "openapi_version": "12.0.0"
   },
   "operations": [
@@ -2993,12 +2993,10 @@
       "method": "POST",
       "path": "/ClientLog/Document",
       "subsystem": "System",
-      "status": "deferred",
-      "disposition": "deferred",
-      "registered": false,
+      "status": "partial",
+      "registered": true,
       "shadow": false,
-      "clients": [],
-      "reason": "deferred: client log ingest not implemented"
+      "clients": []
     },
     {
       "id": "MarkFavoriteItem",

@@ -200,10 +200,6 @@
     "reason": "deferred: Years not implemented"
   },
   {
-    "operationId": "LogFile",
-    "reason": "deferred: client log ingest not implemented"
-  },
-  {
     "operationId": "MergeVersions",
     "reason": "deferred: version merging not implemented"
   },

@@ -1027,6 +1027,12 @@
     },
     {
       "Method": "POST",
+      "Pattern": "/ClientLog/Document",
+      "OperationId": "LogFile",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
       "Pattern": "/UserFavoriteItems/{itemId}",
       "OperationId": "MarkFavoriteItem",
       "Policy": "DefaultAuthorization"

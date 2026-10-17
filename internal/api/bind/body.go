@@ -4,6 +4,7 @@ package bind
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -218,4 +219,30 @@ func (r base64WhitespaceFilter) Read(p []byte) (int, error) {
 			return out, err
 		}
 	}
+}
+
+// ErrBodyTooLarge is returned when a request body is larger than the limit
+// of its route.
+var ErrBodyTooLarge = fmt.Errorf("request body too large")
+
+// LimitedBody returns the raw request body, capped at limit bytes. It ports
+// ASP.NET [RequestSizeLimit]: a declared Content-Length above limit returns
+// ErrBodyTooLarge before any read, and a body that grows above limit while
+// it streams fails the read with ErrBodyTooLarge.
+func LimitedBody(w http.ResponseWriter, r *http.Request, limit int64) (io.Reader, error) {
+	if r.ContentLength > limit {
+		return nil, ErrBodyTooLarge
+	}
+	return limitedReader{r: http.MaxBytesReader(w, r.Body, limit)}, nil
+}
+
+type limitedReader struct{ r io.Reader }
+
+func (l limitedReader) Read(p []byte) (int, error) {
+	n, err := l.r.Read(p)
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		err = ErrBodyTooLarge
+	}
+	return n, err
 }

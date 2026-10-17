@@ -857,6 +857,7 @@ func assertCompositionRoutes(t *testing.T, routes []router.Route) {
 		"POST /Library/Movies/Added":                                            {OperationID: "PostAddedMovies", Policy: string(auth.PolicyDefaultAuthorization)},
 		"GET /Auth/Keys":                                                        {OperationID: "GetKeys", Policy: string(auth.PolicyRequiresElevation)},
 		"POST /Auth/Keys":                                                       {OperationID: "CreateKey", Policy: string(auth.PolicyRequiresElevation)},
+		"POST /ClientLog/Document":                                              {OperationID: "LogFile", Policy: string(auth.PolicyDefaultAuthorization)},
 		"DELETE /Auth/Keys/{key}":                                               {OperationID: "RevokeKey", Policy: string(auth.PolicyRequiresElevation)},
 		"GET /Sessions":                                                         {OperationID: "GetSessions", Policy: string(auth.PolicyDefaultAuthorization)},
 		"GET /socket":                                                           {OperationID: "OpenWebSocket", Policy: string(auth.PolicyDefaultAuthorization)},

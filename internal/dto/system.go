@@ -48,3 +48,9 @@ type SystemInfo struct {
 	EncoderLocation            string                    `json:"EncoderLocation"`
 	SystemArchitecture         string                    `json:"SystemArchitecture"`
 }
+
+// ClientLogDocumentResponseDto is the POST /ClientLog/Document result. It
+// matches Jellyfin.Api.Models.ClientLogDtos.ClientLogDocumentResponseDto.
+type ClientLogDocumentResponseDto struct {
+	FileName string `json:"FileName"`
+}
