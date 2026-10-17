@@ -40,3 +40,37 @@ func TestNFOPeopleCarriesProviderPersonImage(t *testing.T) {
 		}
 	}
 }
+
+// TestNFOPeopleCarriesProviderPersonIDs covers SavePeopleMetadataAsync: each
+// credit's PersonInfo.ProviderIds value is set on its Person entity, and the
+// credit no longer carries the ids.
+func TestNFOPeopleCarriesProviderPersonIDs(t *testing.T) {
+	alice := PersonEntity("Alice")
+	var tmdb, imdb item.ProviderIDs
+	tmdb.Set("Tmdb", "131")
+	imdb.Set("Imdb", "nm0350453")
+	imdb.Set("Tmdb", "")
+	values := []item.Item{
+		{People: []item.PersonCredit{{PersonID: alice.ID, Name: "Alice", ProviderIDs: tmdb}}},
+		{People: []item.PersonCredit{{PersonID: alice.ID, Name: "Alice", ProviderIDs: imdb}}},
+	}
+	people := nfoPeople(values)
+	clearCreditImageURLs(values)
+
+	if len(people) != 1 {
+		t.Fatalf("people = %#v, want Alice", people)
+	}
+	if got, _ := people[0].ProviderIDs.Get("Tmdb"); got != "131" {
+		t.Errorf("Alice Tmdb id = %q, want 131 (an empty credit value does not clear it)", got)
+	}
+	if got, _ := people[0].ProviderIDs.Get("Imdb"); got != "nm0350453" {
+		t.Errorf("Alice Imdb id = %q, want nm0350453", got)
+	}
+	for _, value := range values {
+		for _, credit := range value.People {
+			if len(credit.ProviderIDs.Snapshot()) != 0 {
+				t.Fatalf("credit %q kept provider ids %v after the scan moved them", credit.Name, credit.ProviderIDs.Snapshot())
+			}
+		}
+	}
+}

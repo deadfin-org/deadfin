@@ -49,6 +49,7 @@ import (
 	"github.com/deadfin-org/deadfin/internal/localization"
 	"github.com/deadfin-org/deadfin/internal/naming"
 	"github.com/deadfin-org/deadfin/internal/path"
+	"github.com/deadfin-org/deadfin/internal/people"
 	"github.com/deadfin-org/deadfin/internal/playback"
 	"github.com/deadfin-org/deadfin/internal/playlists"
 	"github.com/deadfin-org/deadfin/internal/playstate"
@@ -285,6 +286,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		CacheFallback: time.Hour,
 	})
 	tmdbConfig := tmdb.LoadConfig(filepath.Join(paths.Config, "plugins", "Jellyfin.Plugin.Tmdb.xml"))
+	tmdbProvider := tmdb.NewProvider(tmdb.Options{HTTP: remoteHTTP, Config: tmdbConfig})
 	musicBrainzConfig := musicbrainz.LoadConfig(filepath.Join(paths.Config, "plugins", "Jellyfin.Plugin.MusicBrainz.xml"))
 	musicBrainzHTTP := remote.NewClient(remote.Config{
 		Doer:           appConfig.providerRemoteDoer,
@@ -330,7 +332,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		}),
 		musicbrainz.NewProvider(musicbrainz.Options{HTTP: musicBrainzHTTP, Config: musicBrainzConfig}),
 		audiodb.NewProvider(audiodb.Options{HTTP: audioDbHTTP, Config: audioDbConfig}),
-		tmdb.NewProvider(tmdb.Options{HTTP: remoteHTTP, Config: tmdbConfig}),
+		tmdbProvider,
 		// AniList acts only in libraries that list it among the series
 		// metadata fetchers; order it after TheMovieDb so its titles win.
 		anilist.NewProvider(anilist.Options{
@@ -595,6 +597,21 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 	if err != nil {
 		return nil, fmt.Errorf("open task scheduler: %w", err)
 	}
+	// The person refresh needs a TMDb key; without one the TMDb provider is
+	// inert and a refresh would only stamp DateLastRefreshed.
+	var peopleService *people.Service
+	if tmdbConfig.APIKey != "" {
+		peopleService, err = people.NewService(people.Options{
+			Items:    items,
+			Provider: tmdbProvider,
+			Settings: manager,
+			Clock:    realClock,
+			Logger:   slog.Default(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("open people service: %w", err)
+		}
+	}
 	builtinDeps := tasks.BuiltinDeps{
 		ScanLibrary:        libraryScanAdapter{scanner: scanner},
 		LibraryScanRunning: scheduler,
@@ -622,6 +639,9 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 	}
 	if trickplayTask != nil {
 		builtinDeps.Trickplay = trickplayTask
+	}
+	if peopleService != nil {
+		builtinDeps.People = peopleService
 	}
 	if err := tasks.RegisterBuiltins(scheduler, builtinDeps); err != nil {
 		return nil, fmt.Errorf("register scheduled tasks: %w", err)
@@ -733,6 +753,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 			TrickplayPath: paths.Trickplay,
 			Logger:        slog.Default(),
 		}),
+		people: personRefresher(peopleService),
 		itemEditor: itemedit.New(itemedit.Options{
 			Items:        items,
 			Libraries:    topology,
@@ -1956,9 +1977,19 @@ type routeServices struct {
 	metadataPlugins    handlers.MetadataPluginCatalog
 	itemDeleter        handlers.ItemDeleter
 	itemEditor         itemEditor
+	people             handlers.PersonRefresher
 	subtitleEditor     handlers.SubtitleEditor
 	scheduler          scheduledTaskService
 	activity           *activitylog.Log
+}
+
+// personRefresher keeps a nil service out of the handler seam: a typed nil
+// pointer in the interface would look like a configured refresher.
+func personRefresher(service *people.Service) handlers.PersonRefresher {
+	if service == nil {
+		return nil
+	}
+	return service
 }
 
 // itemEditor is the metadata and image edit seam. *itemedit.Service
@@ -2058,7 +2089,11 @@ func registerRoutes(rt *router.Router, services routeServices) {
 	})
 	handlers.RegisterQuickConnect(rt, services.clock, func() bool { return services.manager != nil && services.manager.System().QuickConnectAvailable }, services.login, services.users, services.sessions, services.items, services.itemBuilder, services.identity)
 	handlers.RegisterDisplayPreferences(rt, services.displayPreferences)
-	handlers.RegisterItems(rt, services.items, services.itemBuilder, services.clock, handlers.ItemServices{Users: services.users, LatestPreferences: handlers.NewLatestUserPreferences(services.users), Languages: services.localization}, services.downloadFiles, services.manager)
+	itemDependencies := []any{handlers.ItemServices{Users: services.users, LatestPreferences: handlers.NewLatestUserPreferences(services.users), Languages: services.localization}, services.downloadFiles, services.manager}
+	if services.people != nil {
+		itemDependencies = append(itemDependencies, services.people)
+	}
+	handlers.RegisterItems(rt, services.items, services.itemBuilder, services.clock, itemDependencies...)
 	handlers.RegisterShows(rt, services.items, services.itemBuilder, services.items, services.users, services.clock, services.manager)
 	handlers.RegisterUserViews(rt, services.views, services.itemBuilder)
 	handlers.RegisterPlaybackInfo(rt, services.playback, services.users, services.playGrants)

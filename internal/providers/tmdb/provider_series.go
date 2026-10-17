@@ -141,8 +141,9 @@ func (provider *Provider) applySeries(ctx context.Context, target *item.Item, re
 		target.Extra.RemoteTrailers = trailers
 	}
 
-	people := mapCastCrew(provider.config, provider.profileURL(ctx), seriesCast(result.Credits), seriesCrew(result.Credits))
-	people = append(people, creators(result.CreatedBy)...)
+	profile := provider.profileURL(ctx)
+	people := mapCastCrew(provider.config, profile, seriesCast(result.Credits), seriesCrew(result.Credits))
+	people = append(people, creators(profile, result.CreatedBy)...)
 	if len(people) > 0 {
 		target.People = people
 	}
@@ -198,7 +199,7 @@ func seriesOfficialRating(ratings *contentRatings, country string) string {
 }
 
 // creators maps TMDb created_by entries to Creator credits.
-func creators(entries []createdBy) []item.PersonCredit {
+func creators(profile profileURL, entries []createdBy) []item.PersonCredit {
 	out := make([]item.PersonCredit, 0, len(entries))
 	for _, person := range entries {
 		if strings.TrimSpace(person.Name) == "" {
@@ -206,12 +207,24 @@ func creators(entries []createdBy) []item.PersonCredit {
 		}
 		name := strings.TrimSpace(person.Name)
 		out = append(out, item.PersonCredit{
-			PersonID: library.PersonEntity(name).ID,
-			Name:     name,
-			Type:     item.PersonKindCreator,
+			PersonID:    library.PersonEntity(name).ID,
+			Name:        name,
+			Type:        item.PersonKindCreator,
+			ImageURL:    profile.url(person.ProfilePath),
+			ProviderIDs: personProviderIDs(person.ID),
 		})
 	}
 	return out
+}
+
+// personProviderIDs is the PersonInfo.ProviderIds the TMDb providers set on
+// a credit: the TMDb person id when it is positive.
+func personProviderIDs(tmdbID int) item.ProviderIDs {
+	var ids item.ProviderIDs
+	if tmdbID > 0 {
+		ids.Set("Tmdb", strconv.Itoa(tmdbID))
+	}
+	return ids
 }
 
 func seriesCast(credits *seriesCredits) []castMember {
@@ -286,12 +299,13 @@ func mapCast(config Config, profile profileURL, castMembers []castMember, kind i
 		role := strings.TrimSpace(actor.Character)
 		order := actor.Order
 		people = append(people, item.PersonCredit{
-			PersonID:  library.PersonEntity(name).ID,
-			Name:      name,
-			Role:      &role,
-			Type:      kind,
-			SortOrder: &order,
-			ImageURL:  profile.url(actor.ProfilePath),
+			PersonID:    library.PersonEntity(name).ID,
+			Name:        name,
+			Role:        &role,
+			Type:        kind,
+			SortOrder:   &order,
+			ImageURL:    profile.url(actor.ProfilePath),
+			ProviderIDs: personProviderIDs(actor.ID),
 		})
 	}
 	return people
@@ -319,11 +333,12 @@ func mapCrew(config Config, profile profileURL, crewMembers []crewMember) []item
 		name := strings.TrimSpace(member.Name)
 		role := strings.TrimSpace(member.Job)
 		people = append(people, item.PersonCredit{
-			PersonID: library.PersonEntity(name).ID,
-			Name:     name,
-			Role:     &role,
-			Type:     kind,
-			ImageURL: profile.url(member.ProfilePath),
+			PersonID:    library.PersonEntity(name).ID,
+			Name:        name,
+			Role:        &role,
+			Type:        kind,
+			ImageURL:    profile.url(member.ProfilePath),
+			ProviderIDs: personProviderIDs(member.ID),
 		})
 	}
 	return people

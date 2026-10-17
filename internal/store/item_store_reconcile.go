@@ -200,7 +200,11 @@ func (s *ItemStore) reconcileScannedPlan(ctx context.Context, parentID dto.UUID,
 			if err != nil {
 				return ReconcileChildrenResult{}, fmt.Errorf("canonicalize persisted virtual item %s: %w", virtual.ID, err)
 			}
-			virtual = mergeVirtualImages(virtual, stored)
+			if virtual.Kind == item.KindPerson {
+				virtual = mergeVirtualPerson(virtual, stored)
+			} else {
+				virtual = mergeVirtualImages(virtual, stored)
+			}
 			if reflect.DeepEqual(stored, virtual) {
 				continue
 			}
@@ -753,6 +757,31 @@ func mergeVirtualImages(candidate, stored item.Item) item.Item {
 	}
 	candidate.ImageInfos = images
 	return candidate
+}
+
+// mergeVirtualPerson ports LibraryManager.SavePeopleMetadataAsync for a
+// stored person. The stored person keeps its metadata, such as the overview
+// and dates that a person refresh or an edit wrote. A credit provider ID
+// replaces a different stored value, and a credit image fills a missing
+// image type.
+func mergeVirtualPerson(candidate, stored item.Item) item.Item {
+	result := stored
+	result.ImageInfos = mergeVirtualImages(candidate, stored).ImageInfos
+	for _, id := range candidate.ProviderIDs.Snapshot() {
+		if strings.TrimSpace(id.Value) == "" {
+			continue
+		}
+		if current, _ := result.ProviderIDs.Get(id.Name); !strings.EqualFold(current, id.Value) {
+			result.ProviderIDs.Set(id.Name, id.Value)
+		}
+	}
+	if result.SortName == nil {
+		result.SortName = candidate.SortName
+	}
+	if result.PresentationUniqueKey == nil {
+		result.PresentationUniqueKey = candidate.PresentationUniqueKey
+	}
+	return result
 }
 
 func (s *ItemStore) reconcileExistingVirtuals(ctx context.Context, tx *sql.Tx, virtuals []item.Item) (map[dto.UUID]item.Item, error) {

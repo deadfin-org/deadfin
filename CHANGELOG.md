@@ -44,6 +44,11 @@ v0.3.0 is the first public alpha of Deadfin.
 - The `:alpha` image tag. It follows the newest release or release
   candidate. The `:latest` tag follows the newest release (no `-rc.N`), so
   v0.3.0 publishes it first.
+- Person pages show a biography, birth date, death date and birthplace from
+  TMDb. Opening a person without metadata fetches it, and the "Refresh
+  People" scheduled task fetches it for every person not yet refreshed
+  (D-74). Cast and crew keep their TMDb person ID. This needs a TMDb API
+  key (D-11).
 
 ### Changed
 

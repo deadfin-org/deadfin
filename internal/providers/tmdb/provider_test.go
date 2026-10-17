@@ -131,6 +131,14 @@ func TestProviderMapsMovieMetadataFromCassette(t *testing.T) {
 		}
 	}
 
+	// Each credit carries the TMDb person id (PersonInfo.ProviderIds), which
+	// the scanner applies to the Person entity.
+	for index, want := range []string{"6384", "2975", "530", "9339", "9340"} {
+		if got, _ := target.People[index].ProviderIDs.Get("Tmdb"); got != want {
+			t.Errorf("credit %q Tmdb id = %q, want %q", target.People[index].Name, got, want)
+		}
+	}
+
 	// Each credit carries a durable PersonID derived from its name through
 	// library.PersonEntity. The identity matches the one the scanner and the
 	// identify Apply path use, so the provider output persists without a

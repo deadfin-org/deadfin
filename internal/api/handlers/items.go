@@ -4,6 +4,7 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -33,6 +34,13 @@ type ItemDTOBuilder interface {
 	BuildDetailed(context.Context, []item.Item, store.ItemQueryDTOOptions, *dto.UUID) (dto.QueryResult[dto.BaseItemDto], error)
 }
 
+// PersonRefresher is the on-demand Person refresh of GetItem
+// (UserLibraryController.RefreshItemOnDemandIfNeeded). *people.Service
+// satisfies it.
+type PersonRefresher interface {
+	RefreshOnDemand(context.Context, item.Item) (item.Item, bool, error)
+}
+
 // RegisterItems registers the implemented Items page endpoint and its legacy
 // user-scoped alias. Additional item operations register only with their real
 // implementations rather than sharing a placeholder handler.
@@ -45,6 +53,7 @@ func RegisterItems(rt *router.Router, reader ItemReader, build ItemDTOBuilder, c
 	var languages LanguageInfoFinder
 	var downloadFiles playback.DownloadFileSourceService
 	var configuration ShowsConfiguration
+	var people PersonRefresher
 	for _, dependency := range dependencies {
 		switch value := dependency.(type) {
 		case ItemServices:
@@ -57,9 +66,11 @@ func RegisterItems(rt *router.Router, reader ItemReader, build ItemDTOBuilder, c
 			latestPreferences = value
 		case ShowsConfiguration:
 			configuration = value
+		case PersonRefresher:
+			people = value
 		}
 	}
-	h := itemHandler{reader: reader, build: build, clock: clock, users: users, latestPreferences: latestPreferences, configuration: configuration}
+	h := itemHandler{reader: reader, build: build, clock: clock, users: users, latestPreferences: latestPreferences, configuration: configuration, people: people}
 	userData, _ := reader.(UserDataMutator)
 	policy := string(auth.PolicyDefaultAuthorization)
 	rt.Handle(http.MethodGet, "/Items", router.Route{OperationID: "GetItems", Policy: policy}, h.items)
@@ -85,6 +96,7 @@ type itemHandler struct {
 	users             ItemUserResolver
 	latestPreferences LatestUserPreferences
 	configuration     ShowsConfiguration
+	people            PersonRefresher
 }
 
 func (h itemHandler) items(w http.ResponseWriter, request *http.Request) {
@@ -146,6 +158,9 @@ func (h itemHandler) itemForUser(w http.ResponseWriter, request *http.Request, u
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
+	if refreshed, ok := h.refreshPersonOnDemand(request.Context(), result.Items[0], query); ok {
+		result.Items[0] = refreshed
+	}
 	detailOptions := dtobuild.DetailedOptions(query.DtoOptions)
 	page, err := h.build.BuildDetailed(request.Context(), result.Items, detailOptions, query.UserID)
 	if err != nil || len(page.Items) == 0 {
@@ -153,6 +168,29 @@ func (h itemHandler) itemForUser(w http.ResponseWriter, request *http.Request, u
 		return
 	}
 	_ = render.JSON(w, request, http.StatusOK, page.Items[0])
+}
+
+// refreshPersonOnDemand ports the RefreshItemOnDemandIfNeeded call of
+// GetItem: upstream awaits the refresh of a Person without metadata before
+// it builds the response. It reads the item again through the query so the
+// response carries the refreshed row. A failed refresh serves the stored
+// item.
+func (h itemHandler) refreshPersonOnDemand(ctx context.Context, value item.Item, query store.ItemQuery) (item.Item, bool) {
+	if h.people == nil || value.Kind != item.KindPerson {
+		return value, false
+	}
+	if _, refreshed, err := h.people.RefreshOnDemand(ctx, value); err != nil || !refreshed {
+		if err != nil {
+			slog.Default().LogAttrs(ctx, slog.LevelWarn, "person refresh failed", slog.String("item", value.ID.String()), slog.String("error", err.Error()))
+		}
+		return value, false
+	}
+	query.ItemIDs = []dto.UUID{value.ID}
+	result, err := h.reader.Query(ctx, query)
+	if err != nil || len(result.Items) == 0 {
+		return value, false
+	}
+	return result.Items[0], true
 }
 
 func (h itemHandler) resume(w http.ResponseWriter, request *http.Request) {

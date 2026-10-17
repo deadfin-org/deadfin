@@ -89,6 +89,12 @@ type MetadataRefresher interface {
 	RefreshMetadata(context.Context, func(float64)) error
 }
 
+// PeopleRefresher refreshes the metadata of people that have no overview or
+// no Primary image (PeopleValidationTask.RefreshPeopleImagesAsync).
+type PeopleRefresher interface {
+	Run(context.Context, func(float64)) error
+}
+
 // AnimeSeedRefresher downloads the offline anime datasets (at most once a
 // day per source) and rebuilds the anime crosswalk.
 type AnimeSeedRefresher interface {
@@ -111,6 +117,7 @@ type BuiltinDeps struct {
 	TranscodeCleaner   TranscodeCleaner
 	UserDataCleaner    UserDataCleaner
 	MetadataRefresher  MetadataRefresher
+	People             PeopleRefresher
 	AnimeSeeds         AnimeSeedRefresher
 	Trickplay          TrickplayRefresher
 	Clock              clock.Clock // injected clock for retention cutoffs (spec §3: all timing through clock.Clock)
@@ -161,6 +168,10 @@ func RegisterBuiltins(s *Scheduler, deps BuiltinDeps) error {
 		run, ok := runnables[def.ID]
 		if !ok {
 			run = noopRunnable{}
+		}
+		if def.ID == RefreshPeopleID && ok {
+			// PeopleValidationTask.IsHidden is false. Only the stub hides.
+			def.Hidden = false
 		}
 		d := Definition{
 			ID:              def.ID,
@@ -264,6 +275,9 @@ func builtinsRunnables(deps BuiltinDeps) map[string]Runnable {
 	if deps.MetadataRefresher != nil {
 		m[RefreshMetadataID] = &refreshMetadataRunnable{deps: deps}
 	}
+	if deps.People != nil {
+		m[RefreshPeopleID] = &refreshPeopleRunnable{deps: deps}
+	}
 	if deps.AnimeSeeds != nil {
 		m[RefreshAnimeSeedsID] = &refreshAnimeSeedsRunnable{deps: deps}
 	}
@@ -314,6 +328,19 @@ func (r *refreshMetadataRunnable) Run(ctx context.Context, progress func(float64
 	}
 	progress(100)
 	return nil
+}
+
+// refreshPeopleRunnable ports PeopleValidationTask.ExecuteAsync. Upstream
+// defers the task while a library scan runs; the task runs again on its next
+// trigger.
+type refreshPeopleRunnable struct{ deps BuiltinDeps }
+
+func (r *refreshPeopleRunnable) Run(ctx context.Context, progress func(float64)) error {
+	if r.deps.LibraryScanRunning != nil && r.deps.LibraryScanRunning.IsRunning(RefreshLibraryID) {
+		log.Printf("tasks: RefreshPeople skipped: library scan in progress")
+		return nil
+	}
+	return r.deps.People.Run(ctx, progress)
 }
 
 type refreshAnimeSeedsRunnable struct{ deps BuiltinDeps }

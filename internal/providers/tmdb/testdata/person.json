@@ -1,0 +1,72 @@
+[
+  {
+    "method": "GET",
+    "url": "https://api.themoviedb.org/3/configuration",
+    "status": 200,
+    "header": {"Cache-Control": ["public, max-age=3600"], "Content-Type": ["application/json"]},
+    "body": {"images": {"secure_base_url": "https://image.tmdb.org/t/p/"}}
+  },
+  {
+    "method": "GET",
+    "url": "https://api.themoviedb.org/3/person/131?language=en&append_to_response=images",
+    "status": 200,
+    "header": {"Cache-Control": ["public, max-age=3600"], "Content-Type": ["application/json"]},
+    "body": {
+      "id": 131,
+      "name": "Jake Gyllenhaal",
+      "biography": "An American actor.",
+      "birthday": "1980-12-19",
+      "deathday": null,
+      "place_of_birth": "Los Angeles, California, USA",
+      "homepage": null,
+      "imdb_id": "nm0350453",
+      "profile_path": "/jake.jpg",
+      "images": {"profiles": [
+        {"file_path": "/jake-profile.jpg", "iso_639_1": null, "width": 1000, "height": 1500, "vote_average": 5.4, "vote_count": 12},
+        {"file_path": "/jake-older.jpg", "iso_639_1": null, "width": 800, "height": 1200, "vote_average": 5.1, "vote_count": 3}
+      ]}
+    }
+  },
+  {
+    "method": "GET",
+    "url": "https://api.themoviedb.org/3/person/131?language=de-DE&append_to_response=images",
+    "status": 200,
+    "header": {"Cache-Control": ["public, max-age=3600"], "Content-Type": ["application/json"]},
+    "body": {
+      "id": 131,
+      "name": "Jake Gyllenhaal",
+      "biography": "",
+      "birthday": "1980-12-19",
+      "deathday": null,
+      "place_of_birth": "Los Angeles, California, USA",
+      "imdb_id": "nm0350453",
+      "images": {"profiles": []}
+    }
+  },
+  {
+    "method": "GET",
+    "url": "https://api.themoviedb.org/3/search/person?query=Jake+Gyllenhaal&include_adult=false",
+    "status": 200,
+    "header": {"Cache-Control": ["public, max-age=3600"], "Content-Type": ["application/json"]},
+    "body": {"results": [
+      {"id": 131, "name": "Jake Gyllenhaal", "profile_path": "/jake.jpg"},
+      {"id": 99999, "name": "Jake Gyllenhaal Jr", "profile_path": null}
+    ]}
+  },
+  {
+    "method": "GET",
+    "url": "https://api.themoviedb.org/3/person/3084?language=en&append_to_response=images",
+    "status": 200,
+    "header": {"Cache-Control": ["public, max-age=3600"], "Content-Type": ["application/json"]},
+    "body": {
+      "id": 3084,
+      "name": "Marlon Brando",
+      "biography": "An American actor.",
+      "birthday": "1924-04-03",
+      "deathday": "2004-07-01",
+      "place_of_birth": "Omaha, Nebraska, USA",
+      "imdb_id": "nm0000008",
+      "images": {"profiles": [{"file_path": "/brando.jpg", "width": 600, "height": 900}]}
+    }
+  }
+]

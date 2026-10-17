@@ -493,6 +493,10 @@ type PersonCredit struct {
 	// scanner applies it to the Person entity as its Primary image; it is not
 	// stored with the credit.
 	ImageURL string `json:"imageUrl,omitempty"`
+	// ProviderIDs are the provider identifiers of the person
+	// (PersonInfo.ProviderIds). The scanner applies them to the Person entity;
+	// they are not stored with the credit.
+	ProviderIDs ProviderIDs `json:"-"`
 }
 
 // LinkedChildRef is one normalized linked child relation for an Item.

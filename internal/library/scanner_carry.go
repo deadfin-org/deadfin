@@ -431,6 +431,13 @@ func mergePeople(candidate, stored []item.PersonCredit, preferStored, union bool
 		if winner[index].ImageURL == "" {
 			winner[index].ImageURL = match.ImageURL
 		}
+		// MetadataService merges the provider IDs of the source person with
+		// ProviderIds.TryAdd.
+		for _, id := range match.ProviderIDs.Snapshot() {
+			if _, found := winner[index].ProviderIDs.Get(id.Name); !found {
+				winner[index].ProviderIDs.Set(id.Name, id.Value)
+			}
+		}
 	}
 	return winner
 }

@@ -155,6 +155,7 @@ func TestItemNormalizedSatellitesHaveCanonicalShapes(t *testing.T) {
 		{"Type", reflect.TypeOf(PersonKind(0))},
 		{"SortOrder", reflect.TypeOf((*int)(nil))},
 		{"ImageURL", reflect.TypeOf("")},
+		{"ProviderIDs", reflect.TypeOf(ProviderIDs{})},
 	})
 	assertExactFieldTypes(t, reflect.TypeOf(LinkedChildRef{}), []fieldType{
 		{"ItemID", reflect.TypeOf(dto.UUID{})},

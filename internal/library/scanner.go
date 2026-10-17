@@ -2374,6 +2374,14 @@ func nfoPeople(values []item.Item) []item.Item {
 			if url := strings.TrimSpace(credit.ImageURL); url != "" && len(existing.ImageInfos) == 0 {
 				existing.ImageInfos = []item.ImageInfo{{Type: item.ImageTypePrimary, Path: url}}
 			}
+			// It also sets each PersonInfo.ProviderIds value on the person
+			// (SetProviderId when the stored value differs). The store merges
+			// them into a stored person (mergeVirtualPerson).
+			for _, id := range credit.ProviderIDs.Snapshot() {
+				if strings.TrimSpace(id.Value) != "" {
+					existing.ProviderIDs.Set(id.Name, id.Value)
+				}
+			}
 			people[entity.ID] = existing
 		}
 	}
@@ -2389,13 +2397,15 @@ func nfoPeople(values []item.Item) []item.Item {
 	return result
 }
 
-// clearCreditImageURLs drops the provider person image URLs from credits after
-// nfoPeople moved them to the Person entities. The store does not persist the
-// URL with a credit, so a retained URL would make every scan look changed.
+// clearCreditImageURLs drops the provider person image URLs and provider IDs
+// from credits after nfoPeople moved them to the Person entities. The store
+// does not persist them with a credit, so a retained value would make every
+// scan look changed.
 func clearCreditImageURLs(values []item.Item) {
 	for index := range values {
 		for credit := range values[index].People {
 			values[index].People[credit].ImageURL = ""
+			values[index].People[credit].ProviderIDs = item.ProviderIDs{}
 		}
 	}
 }
