@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -85,8 +86,11 @@ type HLSJobRequest struct {
 	SourceRevision           string
 	OpenSource               func() (*sourcefile.Source, error)
 	SegmentLengthSeconds     int
-	RunTimeTicks             int64
-	StartTimeTicks           int64
+	// MaxForwardGap overrides the manager's forward reuse window, in
+	// segment indexes. Zero keeps 24/SegmentLengthSeconds.
+	MaxForwardGap  int
+	RunTimeTicks   int64
+	StartTimeTicks int64
 }
 
 // HLSTrickplayMetadata describes one image-tile rendition advertised by a
@@ -293,7 +297,7 @@ func (service *HLSService) Live(ctx context.Context, request HLSRequest) (HLSRes
 // Segment starts or joins the playlist family, delegates seek/restart policy to
 // the manager, and returns the completed requested segment.
 func (service *HLSService) Segment(ctx context.Context, request HLSRequest) (HLSResponse, error) {
-	prepared, err := service.prepare(ctx, request)
+	prepared, err := service.prepareHLS(ctx, request, true)
 	if err != nil {
 		return HLSResponse{}, err
 	}
@@ -307,7 +311,15 @@ func (service *HLSService) Segment(ctx context.Context, request HLSRequest) (HLS
 	if err != nil {
 		return HLSResponse{}, err
 	}
-	if err := service.manager.RestartHLSAt(ctx, jobRequest, request.SegmentIndex); err != nil {
+	first, end := request.SegmentIndex, request.SegmentIndex+1
+	if plan := prepared.keyframePlan; plan != nil && request.SegmentIndex >= 0 {
+		if request.SegmentIndex >= len(plan.Segments) {
+			return HLSResponse{}, fmt.Errorf("%w: HLS segment %d is outside the %d-segment keyframe playlist", ErrProgressiveInvalid, request.SegmentIndex, len(plan.Segments))
+		}
+		segment := plan.Segments[request.SegmentIndex]
+		first, end = segment.FirstKeyframe, segment.EndKeyframe
+	}
+	if err := service.manager.RestartHLSAt(ctx, jobRequest, first); err != nil {
 		return HLSResponse{}, err
 	}
 	var timing *HLSSegmentTiming
@@ -317,16 +329,68 @@ func (service *HLSService) Segment(ctx context.Context, request HLSRequest) (HLS
 			ActualSegmentLengthTicks: request.ActualSegmentLengthTicks,
 		}
 	}
-	body, err := service.manager.WaitSegment(ctx, prepared.outputPath, request.SegmentIndex, timing)
+	body, err := service.waitSegmentFiles(ctx, prepared.outputPath, first, end, timing)
 	if err != nil {
 		return HLSResponse{}, err
-	}
-	if body == nil {
-		return HLSResponse{}, fmt.Errorf("%w: HLS manager returned nil segment body", ErrProgressiveBackend)
 	}
 	service.manager.PingPlaySession(request.PlaySessionID)
 	response.Body = body
 	return response, nil
+}
+
+// waitSegmentFiles returns the ffmpeg segment files [first, end) as one body.
+// A keyframe-cut remux writes one file per source GOP, and an advertised
+// segment is the concatenation of its GOPs; fMP4 fragments and MPEG-TS
+// packets both concatenate.
+func (service *HLSService) waitSegmentFiles(ctx context.Context, outputPath string, first, end int, timing *HLSSegmentTiming) (io.ReadCloser, error) {
+	if end-first == 1 {
+		body, err := service.manager.WaitSegment(ctx, outputPath, first, timing)
+		if err != nil {
+			return nil, err
+		}
+		if body == nil {
+			return nil, fmt.Errorf("%w: HLS manager returned nil segment body", ErrProgressiveBackend)
+		}
+		return body, nil
+	}
+	parts := make([]io.ReadCloser, 0, end-first)
+	for index := first; index < end; index++ {
+		body, err := service.manager.WaitSegment(ctx, outputPath, index, timing)
+		if err == nil && body == nil {
+			err = fmt.Errorf("%w: HLS manager returned nil segment body", ErrProgressiveBackend)
+		}
+		if err != nil {
+			for _, part := range parts {
+				_ = part.Close()
+			}
+			return nil, err
+		}
+		parts = append(parts, body)
+	}
+	return newJoinedHLSSegment(parts), nil
+}
+
+type joinedHLSSegment struct {
+	io.Reader
+	parts []io.ReadCloser
+}
+
+func newJoinedHLSSegment(parts []io.ReadCloser) *joinedHLSSegment {
+	readers := make([]io.Reader, len(parts))
+	for index, part := range parts {
+		readers[index] = part
+	}
+	return &joinedHLSSegment{Reader: io.MultiReader(readers...), parts: parts}
+}
+
+func (segment *joinedHLSSegment) Close() error {
+	var first error
+	for _, part := range segment.parts {
+		if err := part.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 // LegacyPlaylist returns a manager-owned historical HLS playlist by opaque ID.
@@ -446,6 +510,9 @@ type preparedHLS struct {
 	outputPath               string
 	playlistID               string
 	segment                  string
+	// keyframePlan is set when a video-copy segment job cuts at every source
+	// keyframe and Segment joins GOPs into the advertised segments.
+	keyframePlan *hls.KeyframePlan
 }
 
 const hlsRenditionIdentityOutputPath = "/hls-rendition-identity/playlist.m3u8"
@@ -467,6 +534,13 @@ func hlsRenditionOutputPath(transcodeDir, playSessionID, deviceID, sourceRevisio
 }
 
 func (service *HLSService) prepare(ctx context.Context, request HLSRequest) (preparedHLS, error) {
+	return service.prepareHLS(ctx, request, false)
+}
+
+// prepareHLS resolves the rendition. With keyframeCuts, a video-copy VOD
+// rendition whose playlist snaps to source keyframes is prepared to cut at
+// every keyframe (deadfin#629).
+func (service *HLSService) prepareHLS(ctx context.Context, request HLSRequest, keyframeCuts bool) (preparedHLS, error) {
 	if err := validateHLSRequest(request); err != nil {
 		return preparedHLS{}, err
 	}
@@ -522,6 +596,11 @@ func (service *HLSService) prepare(ctx context.Context, request HLSRequest) (pre
 	if job.Live && !request.AudioOnly {
 		job.VideoQuality.Preset = "superfast"
 	}
+	var keyframePlan *hls.KeyframePlan
+	if keyframeCuts {
+		keyframePlan = service.remuxKeyframePlan(ctx, request, source, job)
+		job.KeyframeCuts = keyframePlan != nil
+	}
 	identityArgs, err := encoding.BuildHLSArgs(job, capabilities)
 	if err != nil {
 		return preparedHLS{}, fmt.Errorf("%w: build HLS rendition identity: %v", ErrProgressiveUnsupported, err)
@@ -543,7 +622,29 @@ func (service *HLSService) prepare(ctx context.Context, request HLSRequest) (pre
 		request: request, source: source, video: video, audio: audio, job: job, capabilities: capabilities, args: args,
 		sourceRevision: sourceRevision, externalSubtitleRevision: externalSubtitleRevision,
 		openExternalSubtitle: openExternalSubtitle, outputPath: outputPath, playlistID: playlistID, segment: segment,
+		keyframePlan: keyframePlan,
 	}, nil
+}
+
+// remuxKeyframePlan returns the keyframe plan that Main advertises for this
+// rendition, or nil when Main advertises equal-length segments.
+func (service *HLSService) remuxKeyframePlan(ctx context.Context, request HLSRequest, source MediaSourceInfo, job encoding.HLSJob) *hls.KeyframePlan {
+	if request.Live || request.AudioOnly || job.OutputVideoCodec != "copy" || service.keyframes == nil {
+		return nil
+	}
+	plan, found, err := hls.RemuxKeyframePlan(ctx, hls.MainPlaylistRequest{
+		ItemID:                    request.ItemID,
+		MediaSourceID:             request.MediaSourceID,
+		FilePath:                  source.Path,
+		SegmentLengthMilliseconds: int64(request.SegmentLengthSeconds) * 1_000,
+		RunTimeTicks:              int64PointerValue(source.RunTimeTicks),
+		IsRemuxVideo:              true,
+		Keyframes:                 service.keyframes,
+	})
+	if err != nil || !found {
+		return nil
+	}
+	return &plan
 }
 
 // useSubtitleCaches points a text subtitle burn-in at the extraction caches,
@@ -1325,6 +1426,10 @@ func (service *HLSService) managerRequest(prepared preparedHLS, live, seekSegmen
 		}
 	}
 	job.StartOffsetTicks = startTimeTicks
+	maxForwardGap := 0
+	if plan := prepared.keyframePlan; plan != nil && seekSegment {
+		job.StartNumber, job.StartOffsetTicks, startTimeTicks, maxForwardGap = hlsKeyframeRestart(*plan, prepared.request.SegmentIndex, int64PointerValue(prepared.source.RunTimeTicks))
+	}
 	args, err := encoding.BuildHLSArgs(job, prepared.capabilities)
 	if err != nil {
 		return HLSJobRequest{}, fmt.Errorf("%w: build HLS manager job: %v", ErrProgressiveUnsupported, err)
@@ -1356,9 +1461,47 @@ func (service *HLSService) managerRequest(prepared preparedHLS, live, seekSegmen
 			return sourcefile.Open(sourcePath, expected)
 		},
 		SegmentLengthSeconds: prepared.request.SegmentLengthSeconds,
+		MaxForwardGap:        maxForwardGap,
 		RunTimeTicks:         int64PointerValue(prepared.source.RunTimeTicks),
 		StartTimeTicks:       startTimeTicks,
 	}, nil
+}
+
+// hlsKeyframeRestart returns the start of a keyframe-cut job for an advertised
+// segment: the GOP index of its first keyframe as the start number, the input
+// seek, the start time, and the forward reuse window in GOPs.
+//
+// An input seek to the exact keyframe time lands on the previous keyframe, so
+// the seek goes 0.5 s into the GOP, as GetFastSeekCommandLineParameter does
+// (EncodingHelper.cs:3046-3072), but never past the middle of a shorter GOP.
+// The reuse window spans the GOPs of the 24 s before the start keyframe, the
+// distance upstream allows (24/SegmentLength segments).
+func hlsKeyframeRestart(plan hls.KeyframePlan, segmentIndex int, runtimeTicks int64) (startNumber int, seekTicks, startTicks int64, maxForwardGap int) {
+	const (
+		seekOffsetTicks = 5_000_000
+		reuseTicks      = 240_000_000
+	)
+	if segmentIndex < 0 || segmentIndex >= len(plan.Segments) {
+		return 0, 0, 0, 0
+	}
+	first := plan.Segments[segmentIndex].FirstKeyframe
+	keyframes := plan.KeyframeTicks
+	window := sort.Search(first, func(index int) bool { return keyframes[index] >= keyframes[first]-reuseTicks })
+	maxForwardGap = max(first-window, 1)
+	if first == 0 {
+		// The first GOP starts at the first packet; no seek.
+		return 0, 0, 0, maxForwardGap
+	}
+	startTicks = keyframes[first]
+	next := runtimeTicks
+	if first+1 < len(keyframes) {
+		next = keyframes[first+1]
+	}
+	seekTicks = startTicks
+	if next > startTicks {
+		seekTicks += min(seekOffsetTicks, (next-startTicks)/2)
+	}
+	return first, seekTicks, startTicks, maxForwardGap
 }
 
 func hlsExternalSubtitleFilterSource(job encoding.HLSJob) string {

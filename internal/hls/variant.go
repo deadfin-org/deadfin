@@ -37,6 +37,10 @@ type MainPlaylistRequest struct {
 type playlistSegment struct {
 	startTicks  int64
 	lengthTicks int64
+	// firstKeyframe and endKeyframe bound the source keyframes of a
+	// keyframe-snapped segment as [firstKeyframe, endKeyframe).
+	firstKeyframe int
+	endKeyframe   int
 }
 
 // CreateMainPlaylist renders a VOD media playlist. Remuxed MKV sources use
@@ -240,8 +244,64 @@ func durationStringLength(ticks int64) int {
 	return length
 }
 
+// KeyframeSegment is one segment of a keyframe-snapped remux playlist. It
+// spans the source keyframes [FirstKeyframe, EndKeyframe) of its plan.
+type KeyframeSegment struct {
+	StartTicks    int64
+	LengthTicks   int64
+	FirstKeyframe int
+	EndKeyframe   int
+}
+
+// KeyframePlan is the keyframe-snapped segment list that CreateMainPlaylist
+// advertises for a remux.
+type KeyframePlan struct {
+	KeyframeTicks []int64
+	Segments      []KeyframeSegment
+}
+
+// RemuxKeyframePlan returns the plan that CreateMainPlaylist advertises for
+// request when it snaps segments to source keyframes. It returns false when
+// the playlist uses equal-length segments, and also when a segment spans no
+// keyframe, because such a plan cannot be cut one keyframe at a time.
+func RemuxKeyframePlan(ctx context.Context, request MainPlaylistRequest) (KeyframePlan, bool, error) {
+	if !keyframePlaylistEligible(request) {
+		return KeyframePlan{}, false, nil
+	}
+	data, found, err := request.Keyframes.Keyframes(ctx, request.ItemID, request.MediaSourceID)
+	if err != nil || !found {
+		return KeyframePlan{}, false, nil
+	}
+	for index := 1; index < len(data.KeyframeTicks); index++ {
+		if data.KeyframeTicks[index] <= data.KeyframeTicks[index-1] {
+			return KeyframePlan{}, false, nil
+		}
+	}
+	segments, err := snapKeyframeSegments(data, request.SegmentLengthMilliseconds)
+	if err != nil {
+		return KeyframePlan{}, false, err
+	}
+	plan := KeyframePlan{KeyframeTicks: data.KeyframeTicks, Segments: make([]KeyframeSegment, len(segments))}
+	for index, segment := range segments {
+		if segment.firstKeyframe >= segment.endKeyframe {
+			return KeyframePlan{}, false, nil
+		}
+		plan.Segments[index] = KeyframeSegment{
+			StartTicks:    segment.startTicks,
+			LengthTicks:   segment.lengthTicks,
+			FirstKeyframe: segment.firstKeyframe,
+			EndKeyframe:   segment.endKeyframe,
+		}
+	}
+	return plan, true, nil
+}
+
+func keyframePlaylistEligible(request MainPlaylistRequest) bool {
+	return request.IsRemuxVideo && !request.ItemID.IsNil() && request.Keyframes != nil && extractionAllowed(request.FilePath)
+}
+
 func mainPlaylistSegments(ctx context.Context, request MainPlaylistRequest) ([]playlistSegment, error) {
-	if request.IsRemuxVideo && !request.ItemID.IsNil() && request.Keyframes != nil && extractionAllowed(request.FilePath) {
+	if keyframePlaylistEligible(request) {
 		// A failed or missing extraction falls back to equal-length
 		// segments; it does not fail the playlist (DynamicHlsPlaylistGenerator.cs).
 		data, found, err := request.Keyframes.Keyframes(ctx, request.ItemID, request.MediaSourceID)
@@ -304,7 +364,8 @@ func snapKeyframeSegments(data keyframes.Data, segmentLengthMilliseconds int64) 
 	desiredCut := desiredTicks
 	lastKeyframe := int64(0)
 	segments := make([]playlistSegment, 0)
-	for _, keyframe := range data.KeyframeTicks {
+	lastIndex := 0
+	for index, keyframe := range data.KeyframeTicks {
 		if keyframe >= desiredCut {
 			length := keyframe - lastKeyframe
 			if int64(len(segments)) >= maxPlaylistSegmentCount {
@@ -313,8 +374,8 @@ func snapKeyframeSegments(data keyframes.Data, segmentLengthMilliseconds int64) 
 			if int64(len(segments)) >= maxCLRSegmentCount {
 				return nil, fmt.Errorf("segment count exceeds CLR maximum array length (%d)", maxCLRSegmentCount)
 			}
-			segments = append(segments, playlistSegment{startTicks: lastKeyframe, lengthTicks: length})
-			lastKeyframe = keyframe
+			segments = append(segments, playlistSegment{startTicks: lastKeyframe, lengthTicks: length, firstKeyframe: lastIndex, endKeyframe: index})
+			lastKeyframe, lastIndex = keyframe, index
 			if desiredCut > math.MaxInt64-desiredTicks {
 				break
 			}
@@ -328,7 +389,7 @@ func snapKeyframeSegments(data keyframes.Data, segmentLengthMilliseconds int64) 
 		if int64(len(segments)) >= maxCLRSegmentCount {
 			return nil, fmt.Errorf("segment count exceeds CLR maximum array length (%d)", maxCLRSegmentCount)
 		}
-		segments = append(segments, playlistSegment{startTicks: lastKeyframe, lengthTicks: remaining})
+		segments = append(segments, playlistSegment{startTicks: lastKeyframe, lengthTicks: remaining, firstKeyframe: lastIndex, endKeyframe: len(data.KeyframeTicks)})
 	}
 	return segments, nil
 }

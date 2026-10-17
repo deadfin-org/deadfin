@@ -969,3 +969,40 @@ func TestBuildHLSArgsHonorsConstrainedH264ProfileAndLevel(t *testing.T) {
 		})
 	}
 }
+
+// A keyframe-cut remux cuts at every source keyframe and seeks exactly where
+// the caller says; the 0.5 s offset and the end clamp do not apply
+// (deadfin#629).
+func TestBuildHLSArgsKeyframeCutsSegmentEveryKeyframe(t *testing.T) {
+	job := hlsUnitJob()
+	job.OutputVideoCodec = "copy"
+	job.KeyframeCuts = true
+	job.StartOffsetTicks = 5_981_000_000
+	job.RunTimeTicks = 6_000_000_000
+	job.StartNumber = 42
+
+	args := mustBuildHLSArgs(t, job)
+	if got := argumentValue(t, args, "-hls_time"); got != "0" {
+		t.Fatalf("keyframe-cut -hls_time = %q, want 0; argv = %q", got, args)
+	}
+	if got := argumentValue(t, args, "-ss"); got != "00:09:58.100" {
+		t.Fatalf("keyframe-cut seek = %q, want the exact 00:09:58.100; argv = %q", got, args)
+	}
+	if got := argumentValue(t, args, "-start_number"); got != "42" {
+		t.Fatalf("keyframe-cut start number = %q, want 42", got)
+	}
+}
+
+func TestBuildHLSArgsRejectsKeyframeCutsOutsideVODVideoCopy(t *testing.T) {
+	transcode := hlsUnitJob()
+	transcode.KeyframeCuts = true
+	live := hlsUnitJob()
+	live.OutputVideoCodec = "copy"
+	live.Live = true
+	live.KeyframeCuts = true
+	for name, job := range map[string]HLSJob{"transcode": transcode, "live": live} {
+		if _, err := BuildHLSArgs(job, Capabilities{H264Encoder: "libx264", AACEncoders: []string{"aac"}}); err == nil {
+			t.Errorf("%s keyframe-cut job built, want an error", name)
+		}
+	}
+}

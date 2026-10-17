@@ -953,7 +953,7 @@ func (adapter hlsTranscodeManager) request(request playback.HLSJobRequest) ffmpe
 		SegmentPattern: request.SegmentPattern, Args: request.Args, IdentityArgs: request.IdentityArgs,
 		PlaySessionID: request.PlaySessionID,
 		DeviceID:      request.DeviceID, MediaSourceID: request.MediaSourceID, StartTimeTicks: request.StartTimeTicks,
-		SegmentLengthSeconds: request.SegmentLengthSeconds, RunTimeTicks: request.RunTimeTicks,
+		SegmentLengthSeconds: request.SegmentLengthSeconds, MaxForwardGap: request.MaxForwardGap, RunTimeTicks: request.RunTimeTicks,
 		SourceRevision: request.SourceRevision, OpenSource: request.OpenSource,
 		EmbeddedSubtitleSource: request.EmbeddedSubtitleSource,
 		ExternalSubtitleSource: request.ExternalSubtitleSource, ExternalSubtitleRevision: request.ExternalSubtitleRevision,

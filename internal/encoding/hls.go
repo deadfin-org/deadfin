@@ -25,6 +25,11 @@ type HLSJob struct {
 	RunTimeTicks      int64
 	Live              bool
 	DirectDolbyVision bool
+	// KeyframeCuts makes a video-copy job cut a segment at every source
+	// keyframe (-hls_time 0), so that output segment N is source GOP N
+	// whatever the start point. StartOffsetTicks is then the exact input
+	// seek, inside the start GOP; the caller chooses it from the keyframes.
+	KeyframeCuts bool
 }
 
 // BuildHLSArgs builds logical ffmpeg argv tokens for a video-on-demand HLS
@@ -80,6 +85,9 @@ func HLSEmbeddedSubtitleFilterSource(job HLSJob) string {
 func validateHLSJob(job HLSJob, caps Capabilities) error {
 	if job.SegmentLengthSeconds <= 0 {
 		return fmt.Errorf("hls segment length must be positive")
+	}
+	if job.KeyframeCuts && (job.Live || job.OutputVideoCodec != "copy") {
+		return fmt.Errorf("hls keyframe cuts require a video-on-demand video copy")
 	}
 	if job.StartNumber < 0 {
 		return fmt.Errorf("hls start number must not be negative")
@@ -176,6 +184,9 @@ func hlsSeekTicks(job HLSJob) int64 {
 		endMarginTicks       = 50_000_000
 	)
 	seek := job.StartOffsetTicks
+	if job.KeyframeCuts {
+		return seek
+	}
 	if !isAudioOnlyHLSJob(job.EncodingJob) && job.OutputVideoCodec == "copy" {
 		seek += remuxSeekOffsetTicks
 	}
@@ -468,7 +479,7 @@ func appendHLSOutputArgs(args []string, job HLSJob, caps Capabilities) []string 
 		"-max_muxing_queue_size", strconv.Itoa(hlsMuxingQueueSize),
 		"-f", "hls",
 		"-max_delay", strconv.Itoa(hlsMaxDelayMicroseconds),
-		"-hls_time", strconv.Itoa(job.SegmentLengthSeconds),
+		"-hls_time", hlsTimeArg(job),
 		"-hls_segment_type", segmentType,
 	)
 	if job.OutputContainer == "fmp4" {
@@ -495,6 +506,18 @@ func appendHLSOutputArgs(args []string, job HLSJob, caps Capabilities) []string 
 		args = append(args, option, "movflags=+frag_discont")
 	}
 	return append(args, "-y", job.OutputPath)
+}
+
+// hlsTimeArg returns the muxer's target segment length. The HLS muxer cuts at
+// the first keyframe at least hls_time*n after the first packet of the
+// process, so a job started mid-file cuts on a grid that the advertised
+// keyframe playlist does not use. Keyframe cuts use 0 to cut at every
+// keyframe instead (deadfin#629, D-72).
+func hlsTimeArg(job HLSJob) string {
+	if job.KeyframeCuts {
+		return "0"
+	}
+	return strconv.Itoa(job.SegmentLengthSeconds)
 }
 
 func hlsSegmentPrefix(playlistPath string) string {

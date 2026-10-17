@@ -46,7 +46,11 @@ type HLSRequest struct {
 	MediaSourceID        string
 	StartTimeTicks       int64
 	SegmentLengthSeconds int
-	RunTimeTicks         int64
+	// MaxForwardGap is the largest forward distance, in segment indexes,
+	// that joins the running job instead of restarting it. Zero uses the
+	// upstream 24/SegmentLengthSeconds (DynamicHlsController.GetDynamicSegment).
+	MaxForwardGap int
+	RunTimeTicks  int64
 	// SourceRevision is the canonical identity of the media source. It must
 	// agree for every request that joins this playlist family.
 	SourceRevision string
@@ -85,6 +89,7 @@ type hlsJob struct {
 	playSessionID            string
 	deviceID                 string
 	segmentLength            int
+	maxForwardGap            int
 	runTimeTicks             int64
 	startTimeTicks           int64
 	mediaSourceID            string
@@ -200,6 +205,7 @@ func (manager *TranscodeManager) validateHLSRequest(request HLSRequest) (*hlsJob
 		startTimeTicks:           request.StartTimeTicks,
 		mediaSourceID:            request.MediaSourceID,
 		segmentLength:            request.SegmentLengthSeconds,
+		maxForwardGap:            request.MaxForwardGap,
 		sourceRevision:           request.SourceRevision,
 		openSource:               request.OpenSource,
 		subtitleSource:           request.EmbeddedSubtitleSource,
@@ -958,6 +964,9 @@ func (manager *TranscodeManager) RestartHLSAt(ctx context.Context, request HLSRe
 			return scanErr
 		}
 		limit := 24 / job.hls.segmentLength
+		if spec.maxForwardGap > 0 {
+			limit = spec.maxForwardGap
+		}
 		restart = state == transcodeExited || index < 0 || !found || index < current || index-current > limit
 	}
 	if !restart {

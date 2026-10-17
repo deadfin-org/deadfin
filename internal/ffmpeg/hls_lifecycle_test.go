@@ -241,6 +241,43 @@ func TestRestartHLSAtJoinsRunningFamilyForSequentialSegmentArgv(t *testing.T) {
 	}
 }
 
+// A keyframe-cut remux counts segment indexes in source GOPs, so the caller
+// widens the forward reuse window past 24/SegmentLengthSeconds (deadfin#629).
+func TestRestartHLSAtHonorsMaxForwardGap(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		gap        int
+		wantStarts int
+	}{
+		{name: "default window restarts", gap: 0, wantStarts: 2},
+		{name: "wider window joins", gap: 20, wantStarts: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const label = "gap"
+			fixture := newHLSFixture(t, "hold")
+			manager := fixture.manager(t, clock.NewReal())
+			defer closeHLSManager(t, manager)
+			base := fixture.request(label, 6)
+			base.MaxForwardGap = tc.gap
+			first := hlsSegmentRequest(base, label, 0)
+			if err := manager.RestartHLSAt(t.Context(), first, 0); err != nil {
+				t.Fatalf("RestartHLSAt(0): %v", err)
+			}
+			fixture.waitStarted(t, label)
+			fixture.writePlaylist(t, first)
+			fixture.writeSegment(t, first, 0, "segment 0")
+
+			ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+			defer cancel()
+			_ = manager.RestartHLSAt(ctx, hlsSegmentRequest(base, label, 10), 10)
+			waitForHLSStarts(t, fixture, label, tc.wantStarts)
+			if got := hlsStartCount(t, fixture, label); got != tc.wantStarts {
+				t.Fatalf("ffmpeg starts after a forward request of 10 = %d, want %d", got, tc.wantStarts)
+			}
+		})
+	}
+}
+
 func TestRestartHLSAtReplacesFamilyWhenIdentityChanges(t *testing.T) {
 	const label = "identity"
 	fixture := newHLSFixture(t, "hold")
