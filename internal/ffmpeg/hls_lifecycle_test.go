@@ -739,7 +739,8 @@ func TestRestartHLSAtFollowsCompatibilityRestartBoundaries(t *testing.T) {
 		current    int
 		wantStarts int
 	}{
-		{name: "fMP4 init restarts at zero-safe boundary", index: -1, withJob: true, current: 10, wantStarts: 2},
+		{name: "fMP4 init joins the running job", index: -1, withJob: true, current: 10, wantStarts: 1},
+		{name: "fMP4 init without a job starts one", index: -1, wantStarts: 1},
 		{name: "missing job starts requested index", index: 3, wantStarts: 1},
 		{name: "backward request restarts", index: 9, withJob: true, current: 10, wantStarts: 2},
 		{name: "forward gap at 24 over segment length reuses", index: 16, withJob: true, current: 10, wantStarts: 1},

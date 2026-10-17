@@ -23,6 +23,9 @@ import (
 const (
 	hlsChaosSessions         = 100
 	hlsChaosOperationTimeout = 2 * time.Second
+	// hlsChaosSeekIndex is far past the 24-second forward gap of every chaos
+	// job, so a request for it replaces the process.
+	hlsChaosSeekIndex = 1000
 )
 
 // TestHLSChaos drives the real manager through a fixed randomized stream of
@@ -57,9 +60,9 @@ func TestHLSChaos(t *testing.T) {
 
 		switch random.IntN(3) {
 		case 0:
-			// A backward/fMP4-boundary seek must replace the process without
+			// A seek far from the running job must replace the process without
 			// overlapping process groups for this output family.
-			fixture.restart(t, manager, request, -1, &expectedProcesses)
+			fixture.restart(t, manager, request, hlsChaosSeekIndex, &expectedProcesses)
 			fixture.assertServingArtifacts(t, manager, request)
 		case 1:
 			// Subtitle changes use a distinct HLS output family but deliberately
@@ -72,7 +75,7 @@ func TestHLSChaos(t *testing.T) {
 		case 2:
 			// Couple a seek with a subtitle-family switch to exercise the paths
 			// concurrently owned by one exact play-session/device pair.
-			fixture.restart(t, manager, request, -1, &expectedProcesses)
+			fixture.restart(t, manager, request, hlsChaosSeekIndex, &expectedProcesses)
 			fixture.assertServingArtifacts(t, manager, request)
 			subtitleLabel := label + "-subtitle"
 			subtitle := fixture.request(subtitleLabel, label, false, "2")

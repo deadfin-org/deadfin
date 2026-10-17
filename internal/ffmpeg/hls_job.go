@@ -508,9 +508,11 @@ func (job *hlsJob) segmentPathFromName(name string) (string, error) {
 }
 
 // WaitSegment opens one completed HLS segment. A segment is complete only
-// after its successor exists or ffmpeg has exited. The successor rule is
-// uniform: the fMP4 initialization segment (index -1) is complete once
-// segment 0 exists.
+// after its successor exists or ffmpeg has exited. The successor of the fMP4
+// initialization segment (index -1) is the first media segment of the job,
+// which is segment N for a job that restarted at -start_number N. Thus the
+// initialization segment is complete once any media segment exists, as in
+// upstream GetSegmentResult.
 func (manager *TranscodeManager) WaitSegment(ctx context.Context, playlist string, index int, timings ...*HLSSegmentTiming) (io.ReadCloser, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -561,7 +563,15 @@ rebind:
 				return nil, fmt.Errorf("open HLS segment %q: %w", segment, openErr)
 			}
 			ready := false
-			if openErr == nil {
+			if openErr == nil && index == -1 {
+				current, found, scanErr := job.hls.currentIndex(manager)
+				if scanErr != nil {
+					_ = file.Close()
+					manager.release(job)
+					return nil, scanErr
+				}
+				ready = found && current >= 0
+			} else if openErr == nil {
 				next, nextErr := job.hls.segmentPath(index + 1)
 				if nextErr != nil {
 					_ = file.Close()
@@ -967,7 +977,15 @@ func (manager *TranscodeManager) RestartHLSAt(ctx context.Context, request HLSRe
 		if spec.maxForwardGap > 0 {
 			limit = spec.maxForwardGap
 		}
-		restart = state == transcodeExited || index < 0 || !found || index < current || index-current > limit
+		if index < 0 {
+			// A running job writes the initialization segment before its
+			// first media segment, whatever its start number. A seek
+			// restart removes the family before the replacement writes it,
+			// so a missing file must not restart the job at segment 0.
+			restart = state == transcodeExited
+		} else {
+			restart = state == transcodeExited || !found || index < current || index-current > limit
+		}
 	}
 	if !restart {
 		return manager.confirmHLSRestartSession(restartSessionKey, restartSessionEpoch)
