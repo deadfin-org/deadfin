@@ -46,6 +46,7 @@ type CellOut struct {
 	Pass     string            `json:"pass"`
 	Human    string            `json:"humanCheck,omitempty"`
 	Minutes  int               `json:"probeMinutes"`
+	Entries  []float64         `json:"entriesS,omitempty"`
 	Expected map[string]Expect `json:"expected"`
 	Items    []ItemOut         `json:"items,omitempty"`
 	// Runs is the public view of Items.

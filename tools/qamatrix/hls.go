@@ -52,6 +52,10 @@ func (k *Check) note(format string, a ...any) {
 type checkOptions struct {
 	runLen int       // segments per run
 	trace  io.Writer // per-segment spans, when set
+	// entries are extra start points in seconds, as a resume or a seek
+	// sends them: a negative value counts from the end. Each starts its
+	// own run at the segment that holds that time.
+	entries []float64
 }
 
 // runCheck checks one decision's stream and subtitle delivery.
@@ -327,6 +331,24 @@ func checkHLS(ctx context.Context, c *client, player string, d Decision, opt che
 	if mid := len(pl.segments) / 2; mid > opt.runLen {
 		run(mid, "after seek")
 	}
+	total := starts[len(starts)-1] + pl.durations[len(pl.durations)-1]
+	for _, at := range opt.entries {
+		if at < 0 {
+			at += total
+		}
+		if i := segmentAt(starts, at); i >= 0 {
+			run(i, fmt.Sprintf("entry %.0f s", at))
+		}
+	}
+}
+
+// segmentAt returns the index of the segment that holds time t, or -1 when
+// t is outside the playlist.
+func segmentAt(starts []float64, t float64) int {
+	if t < 0 || len(starts) == 0 {
+		return -1
+	}
+	return sort.SearchFloat64s(starts, t+1e-9) - 1
 }
 
 // gapTolerance is the largest decode-time step between segments, in

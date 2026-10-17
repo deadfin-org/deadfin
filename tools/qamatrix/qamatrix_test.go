@@ -366,3 +366,65 @@ func TestPublicView(t *testing.T) {
 		t.Errorf("run = %+v", r)
 	}
 }
+
+func TestSegmentAt(t *testing.T) {
+	starts := []float64{0, 6, 12, 18}
+	for _, tc := range []struct {
+		at   float64
+		want int
+	}{{0, 0}, {5.9, 0}, {6, 1}, {17.5, 2}, {178, 3}, {-1, -1}} {
+		if got := segmentAt(starts, tc.at); got != tc.want {
+			t.Errorf("segmentAt(%v) = %d, want %d", tc.at, got, tc.want)
+		}
+	}
+}
+
+func TestCheckHLSEntries(t *testing.T) {
+	srv := hlsServer(t, "hvc1", false, false)
+	defer srv.Close()
+	c := newClient(srv.URL, "secret-token", 10*time.Second)
+	d := Decision{Method: "Remux", StreamURL: "/videos/x/master.m3u8?PlaySessionId=p", PlaySessionID: "p"}
+	var trace strings.Builder
+	k := runCheck(context.Background(), c, playerNative, d, checkOptions{runLen: 2, trace: &trace, entries: []float64{25, -10}})
+	if k.Result != "pass" {
+		t.Fatalf("result %s: %v", k.Result, k.Notes)
+	}
+	// 25 s is in segment 4; -10 s from the 48 s end is 38 s, in segment 6.
+	for _, want := range []string{"entry 25 s seg 4 ", "entry 38 s seg 6 ", "entry 38 s seg 7 "} {
+		if !strings.Contains(trace.String(), want) {
+			t.Errorf("trace lacks %q:\n%s", want, trace.String())
+		}
+	}
+}
+
+func TestInteractionCells(t *testing.T) {
+	for _, c := range cells() {
+		if c.Group == "Interaction" && (c.Dims["delivery"] == "" || c.Dims["ops"] == "" || c.Dims["player"] == "") {
+			t.Errorf("interaction cell %s lacks delivery, ops or player", c.ID)
+		}
+		if c.Dims["delivery"] != "" && strings.Contains(c.Dims["ops"], "resume") && c.Dims["delivery"] != "DirectPlay" && len(c.Entries) == 0 {
+			t.Errorf("HLS resume cell %s has no entry point for qamatrix check", c.ID)
+		}
+	}
+}
+
+func TestOperatorSteps(t *testing.T) {
+	byID := map[string]cell{}
+	for _, c := range cells() {
+		byID[c.ID] = c
+	}
+	for id, want := range map[string][]string{
+		"ATV-R03": {"Video player: Native", "Compatibility must be Auto", "press Back at about 2:58", "choose it", "expected delivery is Remux a:copy", "Method must read Remux"},
+		"ATV-I15": {"Method must read Direct Stream"},
+		"ATV-I32": {"Video player: VLC", "Method must read Transcode"},
+		"ATV-I04": {"Scrub to 90:00"},
+		"ATV-I36": {"Resume is blocked on rc.8", "Method must read Direct Play"},
+	} {
+		h := byID[id].Human
+		for _, w := range want {
+			if !strings.Contains(h, w) {
+				t.Errorf("%s steps lack %q: %s", id, w, h)
+			}
+		}
+	}
+}

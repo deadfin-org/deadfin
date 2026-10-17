@@ -129,6 +129,7 @@ func cmdMap(ctx context.Context, args []string, log io.Writer) error {
 	o.bind(fs)
 	user := fs.String("user", "", "user id for PlaybackInfo (default: first administrator)")
 	perCell := fs.Int("items", 2, "items per cell")
+	only := fs.String("cells", "", "comma-separated cell ids to map; other cells keep their items and results from the local matrix (default: all)")
 	cache := fs.String("library-cache", "", "read or write the fetched item list here")
 	var pins pinFlag
 	fs.Var(&pins, "pin", "CELL=ITEMID: map a pinned (regression) cell to this item; repeatable. Default: the local matrix's items")
@@ -163,7 +164,7 @@ func cmdMap(ctx context.Context, args []string, log io.Writer) error {
 		Schema: 1, Generated: time.Now().UTC().Format(time.RFC3339), Version: info.Version, Build: strings.TrimSpace(build.Version + " " + build.Revision),
 		Assumptions: []string{
 			"Apple TV 4K (2nd/3rd gen) on an HDR TV: HEVC, HDR10, HLG and Dolby Vision decode; no AV1 or VP9 decode.",
-			"Client settings at defaults: no forced HDR/DV transcode, no forced subtitle burn-in, no maximum resolution.",
+			"Client settings at defaults: Compatibility Auto, no forced HDR/DV transcode, no forced subtitle burn-in, no maximum resolution.",
 			"Bitrate fixed at 120 Mbit/s (the clients' bitrate test on a LAN). Lower bitrates add transcodes that this matrix does not cover.",
 			"Stock Swiftfin = SharkParty main before the subtitle overlay (844ca958). Its default player is VLC, whose profile equals SharkParty VLC.",
 			"Remux = HLS fMP4 with the video copied; Transcode = HLS with the video encoded (QSV on live).",
@@ -172,10 +173,22 @@ func cmdMap(ctx context.Context, args []string, log io.Writer) error {
 	for _, p := range players() {
 		m.Players = append(m.Players, PlayerInfo{Key: p, Title: playerTitle(p), AVPlayer: usesAVPlayer(p)})
 	}
+	want := idSet(*only)
+	if len(want) > 0 && old != nil && old.Version != "" {
+		// The results of the other cells came from the old build.
+		m.Version, m.Build = old.Version, old.Build
+	}
 	for _, cl := range cells() {
 		out := CellOut{
 			ID: cl.ID, Group: cl.Group, Title: cl.Title, Dims: cl.Dims, Risk: cl.Risk, Pass: cl.Pass,
-			Human: cl.Human, Minutes: cl.Minutes, Expected: cl.Expect,
+			Human: cl.Human, Minutes: cl.Minutes, Entries: cl.Entries, Expected: cl.Expect,
+		}
+		if len(want) > 0 && !want[cl.ID] {
+			if oc := oldCell(old, cl.ID); oc != nil {
+				out.Items, out.Missing, out.Operator = oc.Items, oc.Missing, oc.Operator
+			}
+			m.Cells = append(m.Cells, out)
+			continue
 		}
 		pinned := pins[cl.ID]
 		if old != nil {
@@ -230,6 +243,19 @@ func cmdMap(ctx context.Context, args []string, log io.Writer) error {
 		m.Cells = append(m.Cells, out)
 	}
 	return o.save(m)
+}
+
+// oldCell returns the cell with this id in m, or nil.
+func oldCell(m *Matrix, id string) *CellOut {
+	if m == nil {
+		return nil
+	}
+	for i := range m.Cells {
+		if m.Cells[i].ID == id {
+			return &m.Cells[i]
+		}
+	}
+	return nil
 }
 
 func displayName(it item) string {
@@ -377,11 +403,16 @@ func cmdCheck(ctx context.Context, args []string, log io.Writer) error {
 		}
 	}
 	want := idSet(*only)
+	entries := map[string][]float64{}
+	for _, cl := range cells() {
+		entries[cl.ID] = cl.Entries
+	}
 	for ci := range m.Cells {
 		cell := &m.Cells[ci]
 		if len(want) > 0 && !want[cell.ID] {
 			continue
 		}
+		opt.entries = entries[cell.ID]
 		for ii := range cell.Items {
 			it := &cell.Items[ii]
 			it.Checks = map[string]*Check{}

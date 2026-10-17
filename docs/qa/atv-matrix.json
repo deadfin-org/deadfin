@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "generated": "2026-10-12T20:12:25Z",
+  "generated": "2026-10-17T01:57:48Z",
   "serverVersion": "12.0.0",
   "deadfinBuild": "v0.2.33 54ff98c07269931c48b15f10e404e879e7fd0a81",
   "assumptions": [
     "Apple TV 4K (2nd/3rd gen) on an HDR TV: HEVC, HDR10, HLG and Dolby Vision decode; no AV1 or VP9 decode.",
-    "Client settings at defaults: no forced HDR/DV transcode, no forced subtitle burn-in, no maximum resolution.",
+    "Client settings at defaults: Compatibility Auto (not Direct play, which sends every file as direct play), no forced HDR/DV transcode, no forced subtitle burn-in, no maximum resolution.",
     "Bitrate fixed at 120 Mbit/s (the clients' bitrate test on a LAN). Lower bitrates add transcodes that this matrix does not cover.",
     "Stock Swiftfin = SharkParty main before the subtitle overlay (844ca958). Its default player is VLC, whose profile equals SharkParty VLC.",
     "Remux = HLS fMP4 with the video copied; Transcode = HLS with the video encoded (QSV on live)."
@@ -220,6 +220,78 @@
         }
       ],
       "status": "pass",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-R03",
+      "group": "Regression",
+      "title": "MKV HEVC Main10 SDR 4K scope EAC3 5.1, resumed at 2:58",
+      "dims": {
+        "audio": "EAC3 5.1",
+        "container": "MKV",
+        "delivery": "Remux a:copy",
+        "fps": "23.976",
+        "ops": "resume off-grid",
+        "player": "SP-AV",
+        "res": "4K",
+        "subs": "none",
+        "video": "HEVC 10-bit SDR"
+      },
+      "risk": "v0.3.0-rc.8: a resume at about 2:58 restarted ffmpeg with -ss/-start_number, the job cut segments on an hls_time grid from the restart point instead of the playlist's keyframe grid, and AVPlayer dropped audio for seconds at a time while video stayed smooth.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min. Resume from a saved position near 2:58 and play 10 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Make a resume point: play from the beginning and press Back at about 2:58. On a film, play past 6% of the runtime instead (about 7:00 on a 110 min film): the server saves a position only after 5% of the runtime. The item page must then show Resume; choose it. If it shows only Play, no position was saved. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 10,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1512p 23.976; audio eac3 6ch eng; subs 2x pgssub, 2x subrip",
+          "runtimeMin": 110,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
       "operator": {
         "status": ""
       }
@@ -3197,7 +3269,7 @@
       "status": "fail",
       "operator": {
         "status": "",
-        "notes": "TODO on TV: bandwidth; stalls or quality drops in play and after a seek."
+        "notes": "TODO on TV: #523 bandwidth; stalls or quality drops in play and after a seek."
       }
     },
     {
@@ -5441,7 +5513,7 @@
       "status": "fail",
       "operator": {
         "status": "",
-        "notes": "TODO on TV: on stock Swiftfin; recovers after a seek, no stall in play."
+        "notes": "TODO on TV: #522 on stock Swiftfin; recovers after a seek, no stall in play."
       }
     },
     {
@@ -6551,6 +6623,3946 @@
         }
       ],
       "status": "pass",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I01",
+      "group": "Interaction",
+      "title": "Remux a:copy, start at 0: 4K SDR 10-bit + EAC3 5.1 (control for R03)",
+      "dims": {
+        "audio": "EAC3 5.1",
+        "container": "MKV",
+        "delivery": "Remux a:copy",
+        "ops": "start at 0",
+        "player": "SP-AV",
+        "res": "4K",
+        "video": "HEVC 10-bit SDR"
+      },
+      "risk": "The same media as ATV-R03, started from 0: a pass here and a fail in R03 isolates the defect to the restart, not to the media.",
+      "pass": "Starts in under 5 s; no audio dropout, A/V drift, stutter or green frames for the full play time; seeks land within 2 s of the target and resume audio and video together. Play 10 min from 0.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Start: on the item page choose Play (or Play from beginning when it offers Resume). Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 10,
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 2160p 23.976; audio eac3 6ch eng; subs 2x subrip",
+          "runtimeMin": 130,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 2160p 23.976; audio eac3 6ch eng; subs 3x subrip",
+          "runtimeMin": 113,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I02",
+      "group": "Interaction",
+      "title": "Remux a:copy, resume off the 6 s grid: 1080p HEVC + EAC3/AC3",
+      "dims": {
+        "audio": "EAC3/AC3",
+        "container": "MKV",
+        "delivery": "Remux a:copy",
+        "ops": "resume off-grid",
+        "player": "SP-AV",
+        "res": "1080p",
+        "video": "HEVC"
+      },
+      "risk": "A resume restarts ffmpeg with -ss and -start_number, and the restarted job cuts segments from the restart point, not on the playlist's keyframe grid. 1080p separates the restart defect from 4K bitrate.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Make a resume point: play from the beginning and press Back at about 2:58. On a film, play past 6% of the runtime instead (about 7:00 on a 110 min film): the server saves a position only after 5% of the runtime. The item page must then show Resume; choose it. If it shows only Play, no position was saved. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 10,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio ac3 6ch eng; subs 1x subrip",
+          "runtimeMin": 44,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "ac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "ac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "ac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 800p 23.976; audio eac3 6ch eng; subs 2x subrip",
+          "runtimeMin": 48,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I03",
+      "group": "Interaction",
+      "title": "Remux a:copy, resume: Dolby Vision 8.1 + EAC3 Atmos",
+      "dims": {
+        "audio": "EAC3/Atmos",
+        "container": "MKV",
+        "delivery": "Remux a:copy",
+        "ops": "resume off-grid",
+        "player": "SP-AV",
+        "res": "4K",
+        "video": "Dolby Vision P8"
+      },
+      "risk": "High-risk triple. The restarted job must start on an IDR frame with its RPU, keep the dvh1 sample entry of the first job, and keep the JOC extension in the first EAC3 frame after the cut.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min. The TV shows Dolby Vision; the receiver shows Atmos after the resume.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Make a resume point: play from the beginning and press Back at about 2:58. On a film, play past 6% of the runtime instead (about 7:00 on a 110 min film): the server saves a position only after 5% of the runtime. The item page must then show Resume; choose it. If it shows only Play, no position was saved. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. DV and Atmos indicators after the resume.",
+      "probeMinutes": 10,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1608p 23.976; audio eac3 6ch eng; subs 2x pgssub, 27x subrip",
+          "runtimeMin": 117,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1608p 23.976; audio eac3 6ch eng; subs 19x subrip",
+          "runtimeMin": 131,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I04",
+      "group": "Interaction",
+      "title": "Remux a:copy, seek forward far: 4K HDR, runtime over 150 min",
+      "dims": {
+        "audio": "EAC3",
+        "delivery": "Remux a:copy",
+        "ops": "seek forward far",
+        "player": "SP-AV",
+        "res": "4K",
+        "runtime": "over 150 min",
+        "video": "HDR10/DV"
+      },
+      "risk": "A jump of more than 60 min into a large 4K file: a high -start_number, a long input seek, and a segment index far from the running job, which the server must kill and replace.",
+      "pass": "Each seek lands within 2 s of the target and resumes picture and sound together within 3 s; then no audio dropout or A/V drift for 2 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub to 90:00. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        5400
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1600p 23.976; audio eac3 6ch eng, eac3 6ch ger, eac3 6ch spa, +7; subs 34x subrip",
+          "runtimeMin": 152,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1600p 23.976; audio eac3 6ch eng, eac3 6ch ger, eac3 6ch spa, +7; subs 34x subrip",
+          "runtimeMin": 152,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I05",
+      "group": "Interaction",
+      "title": "Remux a:copy, seek backward behind the job: 4K HEVC",
+      "dims": {
+        "delivery": "Remux a:copy",
+        "ops": "seek backward",
+        "player": "SP-AV",
+        "res": "4K",
+        "video": "HEVC"
+      },
+      "risk": "After a forward seek, a seek back to segments the current job never made needs a second restart; old and new jobs must not both write the same segment numbers.",
+      "pass": "Each seek lands within 2 s of the target and resumes picture and sound together within 3 s; then no audio dropout or A/V drift for 2 min. Seek forward 10 min, then back 15 min: both land and play cleanly.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub forward to 20:00, play 1 min, then scrub back to 5:00. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        1200,
+        300
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1600p 23.976; audio eac3 6ch eng; subs 5x pgssub, 2x subrip",
+          "runtimeMin": 138,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 2160p 23.976; audio eac3 6ch eng; subs 2x subrip",
+          "runtimeMin": 130,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I06",
+      "group": "Interaction",
+      "title": "Remux a:copy, seek to the last 30 s: MKV HEVC episode",
+      "dims": {
+        "container": "MKV",
+        "delivery": "Remux a:copy",
+        "ops": "seek near end",
+        "player": "SP-AV",
+        "video": "HEVC"
+      },
+      "risk": "The restart seek clamps to runtime - 5 s (#482); the last segment is short, and end of stream must reach the client as an ENDLIST, not a stall.",
+      "pass": "The seek lands within 2 s; the last seconds play with sound; the player ends the item (or shows next-up) without a spinner.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub to the last 30 s. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 2,
+      "entriesS": [
+        -30
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 800p 23.976; audio eac3 6ch eng; subs 2x subrip",
+          "runtimeMin": 48,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1080p 24.000; audio eac3 6ch eng; subs 33x subrip",
+          "runtimeMin": 17,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I07",
+      "group": "Interaction",
+      "title": "Remux a:copy, audio-track switch mid-play: two AAC/AC3/EAC3 tracks",
+      "dims": {
+        "audio": "multiple tracks",
+        "container": "MKV",
+        "delivery": "Remux a:copy",
+        "ops": "audio-track switch mid-play",
+        "player": "SP-AV"
+      },
+      "risk": "Swiftfin restarts playback with a new AudioStreamIndex at the current position: a resume off the grid with a different -map. The new job must not reuse the old job's segments.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min. Switch at about 5 min: the new language plays from the switch point, with no echo of the old track.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Audio switch: at about 5:00, click the touch surface, swipe up to the action buttons, choose Audio and pick the other track. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        300
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 2160p 23.976; audio aac 6ch eng, aac 2ch ger, aac 2ch fre, +2; subs 5x dvdsub",
+          "runtimeMin": 43,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio eac3 2ch eng, aac 2ch jpn; subs 2x ass, 2x subrip; 19 attachments",
+          "runtimeMin": 24,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I08",
+      "group": "Interaction",
+      "title": "Remux a:copy, pause over 5 min then resume: 4K",
+      "dims": {
+        "delivery": "Remux a:copy",
+        "ops": "long pause",
+        "player": "SP-AV",
+        "res": "4K"
+      },
+      "risk": "The server reaps the idle HLS job; on play, AVPlayer asks for the next segment and the server restarts at that segment: the resume path without a new PlaybackInfo.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min. Pause at about 3 min for 6 min, then play.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Pause: press Play/Pause at about 3:00, wait 6 min (if the screen saver starts, press Play/Pause once to wake it), then press Play/Pause to play. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Pause for over 5 min.",
+      "probeMinutes": 3,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit HDR10 2160p 23.976; audio eac3 6ch fre, eac3 6ch eng; subs 4x subrip",
+          "runtimeMin": 43,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit HDR10 2064p 23.976; audio eac3 6ch eng; subs 33x pgssub",
+          "runtimeMin": 102,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I09",
+      "group": "Interaction",
+      "title": "Remux a:copy, background and foreground: Dolby Vision 8.1",
+      "dims": {
+        "delivery": "Remux a:copy",
+        "ops": "background/foreground",
+        "player": "SP-AV",
+        "res": "4K",
+        "video": "Dolby Vision P8"
+      },
+      "risk": "tvOS tears down the player in the background; on return the app rebuilds the item at the saved position, so the TV leaves and re-enters DV around a restarted job.",
+      "pass": "After 2 min on the home screen, the app resumes within 10 s of the position, in Dolby Vision, with sound.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Background: press the TV button for the Home screen, wait 2 min, then open the app again from Home. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Home button for 2 min, then return.",
+      "probeMinutes": 3,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1600p 23.976; audio eac3 6ch eng; subs 5x pgssub, 2x subrip",
+          "runtimeMin": 138,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1608p 23.976; audio eac3 6ch eng; subs 2x pgssub, 27x subrip",
+          "runtimeMin": 117,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I10",
+      "group": "Interaction",
+      "title": "Remux a:copy, next-episode autoplay: HEVC + EAC3 series",
+      "dims": {
+        "audio": "EAC3",
+        "delivery": "Remux a:copy",
+        "ops": "next-episode autoplay",
+        "player": "SP-AV",
+        "video": "HEVC"
+      },
+      "risk": "The old job must stop and the new one start from 0 with a new play session; a stale job or a reused transcode directory gives the next episode the old media.",
+      "pass": "Seek to the last minute; the next episode starts by itself from 0 with sound, and its first minutes play cleanly.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Next episode: scrub to the last 60 s and let the episode end without pressing anything; the next one must start by itself. Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Autoplay to the next episode.",
+      "probeMinutes": 2,
+      "entriesS": [
+        -60
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 800p 23.976; audio eac3 6ch eng; subs 2x subrip",
+          "runtimeMin": 48,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1080p 24.000; audio eac3 6ch eng; subs 33x subrip",
+          "runtimeMin": 17,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I11",
+      "group": "Interaction",
+      "title": "Two concurrent 4K remux streams (two devices)",
+      "dims": {
+        "delivery": "Remux a:copy",
+        "ops": "two concurrent streams",
+        "player": "SP-AV",
+        "res": "4K"
+      },
+      "risk": "Two jobs share the transcode directory, disk and the job table (#514 had gaps and 500s). One stream's seek must not kill or poison the other.",
+      "pass": "Play this item on the Apple TV and a second 4K item (any I-cell) on another client; seek on one: the other plays on without a stall.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Second stream: start this item on the Apple TV, then the second item on another client (phone app or web). Check the path: the expected delivery is Remux a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Needs a second client.",
+      "probeMinutes": 5,
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit HDR10 2160p 23.976; audio eac3 6ch fre, eac3 6ch eng; subs 4x subrip",
+          "runtimeMin": 43,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit HDR10 2064p 23.976; audio eac3 6ch eng; subs 33x pgssub",
+          "runtimeMin": 102,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I12",
+      "group": "Interaction",
+      "title": "Remux a:copy, resume: variable frame rate",
+      "dims": {
+        "delivery": "Remux a:copy",
+        "fps": "VFR",
+        "ops": "resume off-grid",
+        "player": "SP-AV"
+      },
+      "risk": "On VFR video, segment math from a frame rate is wrong, so a restart lands farther from the playlist grid than on CFR.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Make a resume point: play from the beginning and press Back at about 2:58. On a film, play past 6% of the runtime instead (about 7:00 on a 110 min film): the server saves a position only after 5% of the runtime. The item page must then show Resume; choose it. If it shows only Play, no position was saved. Check the path: the expected delivery is Remux. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay"
+        },
+        "swiftfin-native": {
+          "method": "Remux"
+        }
+      },
+      "runs": [
+        {
+          "source": "MOV; hevc Main 8-bit SDR 1072p 47.952; audio aac 6ch eng",
+          "runtimeMin": 21,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "transcodeReasons": [
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "transcodeReasons": [
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I13",
+      "group": "Interaction",
+      "title": "Remux a:copy + PGS on, resume: 4K",
+      "dims": {
+        "delivery": "Remux a:copy",
+        "ops": "resume off-grid",
+        "player": "SP-AV",
+        "res": "4K",
+        "subs": "PGS"
+      },
+      "risk": "The SharkParty overlay reads the external .sup and must place cues at the resumed media time, not at the restart's zero.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min. PGS cues appear on time after the resume.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Make a resume point: play from the beginning and press Back at about 2:58. On a film, play past 6% of the runtime instead (about 7:00 on a 110 min film): the server saves a position only after 5% of the runtime. The item page must then show Resume; choose it. If it shows only Play, no position was saved. Check the path: the expected delivery is Remux a:copy s:External. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Subtitle timing after a resume.",
+      "probeMinutes": 5,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy",
+          "subtitle": "External"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy",
+          "subtitle": "Embed"
+        },
+        "swiftfin-native": {
+          "method": "Transcode",
+          "subtitle": "Encode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1600p 23.976; audio eac3 6ch eng; subs 5x pgssub, 2x subrip",
+          "runtimeMin": 138,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1608p 23.976; audio eac3 6ch eng; subs 2x pgssub, 27x subrip",
+          "runtimeMin": 117,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I14",
+      "group": "Interaction",
+      "title": "Remux a:copy, subtitle switch mid-play: text to image to off",
+      "dims": {
+        "delivery": "Remux a:copy",
+        "ops": "subtitle on/off/switch",
+        "player": "SP-AV",
+        "subs": "SRT + PGS"
+      },
+      "risk": "On SharkParty the switch is client-side (External), so the stream must not restart; a restart here means the client sent a new PlaybackInfo.",
+      "pass": "Starts in under 5 s; no audio dropout, A/V drift, stutter or green frames for the full play time; seeks land within 2 s of the target and resume audio and video together. The selected subtitle shows with correct timing; turning it off removes it. Switch SRT to PGS to off: each change applies within 2 s, with no rebuffer.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Subtitles: click the touch surface, swipe up to the action buttons, choose Subtitles; switch tracks and turn them off as the pass condition says. Check the path: the expected delivery is Remux a:copy s:External. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Remux. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Subtitle menu switches.",
+      "probeMinutes": 3,
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy",
+          "subtitle": "External"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy",
+          "subtitle": "Embed"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "copy",
+          "subtitle": "Hls"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1600p 23.976; audio eac3 6ch eng; subs 5x pgssub, 2x subrip",
+          "runtimeMin": 138,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Hls",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1608p 23.976; audio eac3 6ch eng; subs 2x pgssub, 27x subrip",
+          "runtimeMin": 117,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Hls",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I15",
+      "group": "Interaction",
+      "title": "Remux a:transcode, resume: 4K HDR + TrueHD Atmos",
+      "dims": {
+        "audio": "TrueHD/Atmos",
+        "delivery": "Remux a:transcode",
+        "ops": "resume off-grid",
+        "player": "SP-AV",
+        "res": "4K",
+        "video": "HDR10/DV"
+      },
+      "risk": "High-risk triple. Two clocks restart together: the copied video cuts at a keyframe, the encoded audio starts with encoder priming. Any offset between them is a gap at every segment edge.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Make a resume point: play from the beginning and press Back at about 2:58. On a film, play past 6% of the runtime instead (about 7:00 on a 110 min film): the server saves a position only after 5% of the runtime. The item page must then show Resume; choose it. If it shows only Play, no position was saved. Check the path: the expected delivery is Remux a:transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Stream. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 10,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1600p 23.976; audio truehd 8ch eng, ac3 6ch eng; subs 42x pgssub",
+          "runtimeMin": 140,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "AudioCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit HDR10 2160p 23.976; audio truehd 8ch eng, truehd 8ch zho, ac3 6ch fra, +4; subs 10x pgssub",
+          "runtimeMin": 150,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "AudioCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I16",
+      "group": "Interaction",
+      "title": "Remux a:transcode, seek forward far: DTS-HD MA, long runtime",
+      "dims": {
+        "audio": "DTS-HD MA",
+        "delivery": "Remux a:transcode",
+        "ops": "seek forward far",
+        "player": "SP-AV",
+        "runtime": "over 120 min"
+      },
+      "risk": "A long input seek with a DTS decoder restart; the first audio frames after -ss can be dropped, so audio starts late against video.",
+      "pass": "Each seek lands within 2 s of the target and resumes picture and sound together within 3 s; then no audio dropout or A/V drift for 2 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub to 80:00. Check the path: the expected delivery is Remux a:transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Stream. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        4800
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 2076p 23.976; audio dts 8ch eng, ac3 2ch eng; subs 55x pgssub, 3x subrip",
+          "runtimeMin": 130,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit HDR10 1600p 23.810; audio dts 7ch eng; subs 2x pgssub",
+          "runtimeMin": 151,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I17",
+      "group": "Interaction",
+      "title": "Remux a:transcode, seek backward: DTS 5.1",
+      "dims": {
+        "audio": "DTS",
+        "delivery": "Remux a:transcode",
+        "ops": "seek backward",
+        "player": "SP-AV"
+      },
+      "risk": "A backward seek restarts both the copy and the audio encoder on segments the client already played; AVPlayer must not mix cached and new segments.",
+      "pass": "Each seek lands within 2 s of the target and resumes picture and sound together within 3 s; then no audio dropout or A/V drift for 2 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub forward to 15:00, play 1 min, then scrub back to 5:00. Check the path: the expected delivery is Remux a:transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Stream. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        900,
+        300
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; h264 High 8-bit SDR 1080p 23.976; audio dts 6ch eng; subs 2x subrip",
+          "runtimeMin": 46,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; h264 High 8-bit SDR 1080p 23.976; audio dts 6ch eng; subs 2x subrip",
+          "runtimeMin": 92,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I18",
+      "group": "Interaction",
+      "title": "Audio switch from a copy track to a transcode track: EAC3/AC3 to TrueHD/DTS",
+      "dims": {
+        "audio": "multiple tracks",
+        "delivery": "Remux a:copy to a:transcode",
+        "ops": "audio-track switch mid-play",
+        "player": "SP-AV"
+      },
+      "risk": "The delivery changes mid-play: the new job transcodes audio where the old copied it, at an off-grid position, and the audio codec in the init segment changes.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min. Switch at about 5 min: the new track plays from the switch point.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Audio switch: at about 5:00, click the touch surface, swipe up to the action buttons, choose Audio and pick the other track. Check the path: the expected delivery is Remux a:transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Stream. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        300
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "sharkparty-vlc": {
+          "method": ""
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit HDR10 2160p 23.976; audio ac3 2ch ita, dts 6ch ita, eac3 6ch eng; subs 3x subrip",
+          "runtimeMin": 137,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio ac3 6ch eng, ac3 6ch spa, dts 6ch jpn; subs 3x pgssub; 1 attachments",
+          "runtimeMin": 81,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I19",
+      "group": "Interaction",
+      "title": "Remux a:transcode, pause over 5 min and background: Opus or DTS",
+      "dims": {
+        "audio": "Opus/DTS",
+        "delivery": "Remux a:transcode",
+        "ops": "long pause, background/foreground",
+        "player": "SP-AV"
+      },
+      "risk": "The reaped job restarts the audio encoder at the paused segment; a stale encoder or a reused segment gives a gap at the resume point.",
+      "pass": "After the resume, picture and sound start together within 5 s at the saved position (within 2 s); then no audio dropout, A/V drift, stutter or green frame for 5 min. Pause 6 min, play 1 min, then 2 min on the home screen and return.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Pause: press Play/Pause at about 3:00, wait 6 min (if the screen saver starts, press Play/Pause once to wake it), then press Play/Pause to play. Background: press the TV button for the Home screen, wait 2 min, then open the app again from Home. Check the path: the expected delivery is Remux a:transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Stream. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Pause and background.",
+      "probeMinutes": 3,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio opus 2ch eng, opus 2ch jpn; subs 2x ass; 7 attachments",
+          "runtimeMin": 23,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "opus"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio opus 2ch jpn; subs 8x ass; 21 attachments",
+          "runtimeMin": 23,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "opus"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I20",
+      "group": "Interaction",
+      "title": "Remux a:transcode, seek to the last 30 s: TrueHD",
+      "dims": {
+        "audio": "TrueHD",
+        "delivery": "Remux a:transcode",
+        "ops": "seek near end",
+        "player": "SP-AV"
+      },
+      "risk": "The audio encoder flushes at end of input; a short last segment or a missing final audio packet stalls AVPlayer before the end.",
+      "pass": "The seek lands within 2 s; sound plays to the end; the item ends without a spinner.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub to the last 30 s. Check the path: the expected delivery is Remux a:transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Stream. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 2,
+      "entriesS": [
+        -30
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10Plus 2074p 23.976; audio truehd 8ch eng, eac3 6ch eng; subs 2x pgssub, 5x subrip",
+          "runtimeMin": 107,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "AudioCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio truehd 6ch eng; subs 1x pgssub",
+          "runtimeMin": 43,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "AudioCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I21",
+      "group": "Interaction",
+      "title": "Remux a:transcode, next-episode autoplay: Opus or FLAC series",
+      "dims": {
+        "audio": "Opus/FLAC",
+        "delivery": "Remux a:transcode",
+        "ops": "next-episode autoplay",
+        "player": "SP-AV"
+      },
+      "risk": "Episode-to-episode job handover while an audio encoder runs; the new episode must start from 0 with its own audio.",
+      "pass": "Seek to the last minute; the next episode starts by itself from 0 with sound.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Next episode: scrub to the last 60 s and let the episode end without pressing anything; the next one must start by itself. Check the path: the expected delivery is Remux a:transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Stream. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Autoplay to the next episode.",
+      "probeMinutes": 2,
+      "entriesS": [
+        -60
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio opus 2ch eng, opus 2ch jpn; subs 2x ass; 7 attachments",
+          "runtimeMin": 23,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "opus"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio opus 2ch jpn; subs 8x ass; 21 attachments",
+          "runtimeMin": 23,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "opus"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I22",
+      "group": "Interaction",
+      "title": "Text subtitle switch on stock Swiftfin: HLS WebVTT, DTS",
+      "dims": {
+        "audio": "DTS",
+        "delivery": "Remux a:transcode",
+        "ops": "subtitle on/off/switch",
+        "player": "SF-AV",
+        "subs": "two SRT tracks"
+      },
+      "risk": "Stock Swiftfin carries text subtitles as WebVTT in the manifest; a switch sends a new PlaybackInfo, a new job at the current position, and a new subtitle playlist that must line up with the restarted media.",
+      "pass": "Starts in under 5 s; no audio dropout, A/V drift, stutter or green frames for the full play time; seeks land within 2 s of the target and resume audio and video together. The selected subtitle shows with correct timing; turning it off removes it. Switch to the second track at about 5 min: cues stay in sync.",
+      "humanCheck": "Setup: stock Swiftfin, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Subtitles: click the touch surface, swipe up to the action buttons, choose Subtitles; switch tracks and turn them off as the pass condition says. Check the path: the expected delivery is Remux a:transcode s:Hls. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Stream. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Stock Swiftfin build.",
+      "probeMinutes": 5,
+      "entriesS": [
+        300
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode",
+          "subtitle": "External"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy",
+          "subtitle": "Embed"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode",
+          "subtitle": "Hls"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1632p 23.976; audio dts 6ch eng, ac3 2ch eng, ac3 2ch eng; subs 57x pgssub, 3x subrip",
+          "runtimeMin": 104,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "subtitle": "Hls",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithEL 2160p 23.976; audio dts 6ch eng, dts 5ch eng, flac 2ch eng, +1; subs 25x pgssub, 11x subrip",
+          "runtimeMin": 96,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "subtitle": "Hls",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I23",
+      "group": "Interaction",
+      "title": "Transcode, resume: H.264 Hi10P anime",
+      "dims": {
+        "delivery": "Transcode SDR",
+        "ops": "resume off-grid",
+        "player": "SP-AV",
+        "video": "H.264 10-bit"
+      },
+      "risk": "A transcode forces keyframes on the segment grid, so the grid holds; the risk is restart latency (6-8 s for the first segment at 1080p QSV) and the encoder's first GOP after -ss.",
+      "pass": "After the resume, picture and sound start together within 8 s at the saved position (within 2 s); then no stall, A/V drift or green frame for 5 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Make a resume point: play from the beginning and press Back at about 2:58. On a film, play past 6% of the runtime instead (about 7:00 on a 110 min film): the server saves a position only after 5% of the runtime. The item page must then show Resume; choose it. If it shows only Play, no position was saved. Check the path: the expected delivery is Transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "Transcode"
+        },
+        "swiftfin-native": {
+          "method": "Transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; h264 High 10 10-bit SDR 1080p 23.976; audio flac 2ch eng, flac 2ch jpn; subs 2x ass; 16 attachments",
+          "runtimeMin": 25,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "VideoProfileNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; h264 High 10 10-bit SDR 1080p 23.976; audio flac 2ch jpn, flac 2ch; subs 2x ass; 15 attachments",
+          "runtimeMin": 24,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "VideoProfileNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I24",
+      "group": "Interaction",
+      "title": "Transcode, seek forward far then to the end: AV1, VC-1 or MPEG-2",
+      "dims": {
+        "delivery": "Transcode SDR",
+        "ops": "seek forward far, seek near end",
+        "player": "SP-AV",
+        "video": "AV1/VC-1/MPEG-2"
+      },
+      "risk": "Each far seek restarts the encoder; near the end the encoder must flush its last GOP so the final segment exists.",
+      "pass": "Each seek lands within 2 s of the target and resumes within 8 s; then no stall or A/V drift for 2 min. A seek to the last 30 s plays to the end.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub to 40:00, play 1 min, then scrub to the last 30 s. Check the path: the expected delivery is Transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        2400,
+        -30
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Transcode"
+        },
+        "sharkparty-vlc": {
+          "method": ""
+        },
+        "swiftfin-native": {
+          "method": "Transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; vc1 Advanced 8-bit SDR 1080p 23.976; audio truehd 6ch eng, eac3 6ch eng, ac3 6ch eng; subs 4x pgssub, 2x subrip",
+          "runtimeMin": 123,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; vc1 Advanced 8-bit SDR 1080p 23.976; audio dts 6ch eng, dts 6ch eng; subs 6x pgssub",
+          "runtimeMin": 124,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I25",
+      "group": "Interaction",
+      "title": "Transcode, seek backward: interlaced (deinterlace)",
+      "dims": {
+        "delivery": "Transcode SDR",
+        "ops": "seek backward",
+        "player": "SP-AV",
+        "video": "H.264 interlaced"
+      },
+      "risk": "Deinterlace doubles or keeps the field rate; after a restart the output frame rate and timestamps must match the first job.",
+      "pass": "Each seek lands within 2 s of the target and resumes within 8 s; then no stall or A/V drift for 2 min. No combing after the seek.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub forward to 15:00, play 1 min, then scrub back to 5:00. Check the path: the expected delivery is Transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 3,
+      "entriesS": [
+        900,
+        300
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Transcode"
+        },
+        "sharkparty-vlc": {
+          "method": ""
+        },
+        "swiftfin-native": {
+          "method": "Transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; h264 High 8-bit SDR 1080p 25.000; audio dts 6ch eng, dts 2ch eng; subs 1x pgssub, 2x subrip",
+          "runtimeMin": 29,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "InterlacedVideoNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "InterlacedVideoNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; h264 High 8-bit SDR 1076p 23.976; audio aac 2ch eng; subs 1x subrip; 4 attachments",
+          "runtimeMin": 21,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "InterlacedVideoNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "InterlacedVideoNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I26",
+      "group": "Interaction",
+      "title": "Transcode, pause over 5 min then resume: AV1",
+      "dims": {
+        "delivery": "Transcode SDR",
+        "ops": "long pause",
+        "player": "SP-AV",
+        "video": "AV1"
+      },
+      "risk": "The reaped encoder job restarts at the paused segment; QSV session setup adds latency, and the client may time out the segment request.",
+      "pass": "After the resume, picture and sound start together within 8 s at the saved position (within 2 s); then no stall, A/V drift or green frame for 5 min. Pause 6 min, then play.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Pause: press Play/Pause at about 3:00, wait 6 min (if the screen saver starts, press Play/Pause once to wake it), then press Play/Pause to play. Check the path: the expected delivery is Transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Pause for over 5 min.",
+      "probeMinutes": 3,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "Transcode"
+        },
+        "swiftfin-native": {
+          "method": "Transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; av1 Main 10-bit SDR 1080p 23.976; audio opus 2ch jpn; subs 1x ass; 8 attachments",
+          "runtimeMin": 24,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "VideoCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; av1 Main 10-bit SDR 1080p 23.976; audio opus 2ch jpn; subs 2x ass, 31x subrip; 19 attachments",
+          "runtimeMin": 25,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "VideoCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I27",
+      "group": "Interaction",
+      "title": "Two concurrent streams: a video transcode and a 4K audio-transcode remux",
+      "dims": {
+        "delivery": "Transcode SDR + Remux a:transcode",
+        "ops": "two concurrent streams",
+        "player": "SP-AV"
+      },
+      "risk": "A QSV transcode and a CPU audio encode at once: if either runs below realtime, the client stalls; the two jobs must stay independent on seek.",
+      "pass": "Play this item on the Apple TV and ATV-I15's item on another client; both play for 5 min without a stall; a seek on one leaves the other playing.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Second stream: start this item on the Apple TV, then the second item on another client (phone app or web). Check the path: the expected delivery is Transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Needs a second client.",
+      "probeMinutes": 5,
+      "expected": {
+        "sharkparty-native": {
+          "method": "Transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "Transcode"
+        },
+        "swiftfin-native": {
+          "method": "Transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; av1 Main 10-bit SDR 1080p 23.976; audio opus 2ch jpn; subs 1x ass; 8 attachments",
+          "runtimeMin": 24,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "VideoCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; av1 Main 10-bit SDR 1080p 23.976; audio opus 2ch jpn; subs 2x ass, 31x subrip; 19 attachments",
+          "runtimeMin": 25,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "VideoCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "opus",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I28",
+      "group": "Interaction",
+      "title": "Burn-in toggle on stock Swiftfin: PGS on and off mid-play",
+      "dims": {
+        "delivery": "Remux to Transcode (burn-in)",
+        "ops": "subtitle on/off/switch",
+        "player": "SF-AV",
+        "subs": "PGS"
+      },
+      "risk": "Turning PGS on changes the delivery from Remux to a burn-in Transcode at the current position, and off changes it back: two method changes and two off-grid restarts.",
+      "pass": "Turn PGS on at about 3 min and off at about 6 min: each change resumes within 8 s at the same position, with subtitles in sync while on.",
+      "humanCheck": "Setup: stock Swiftfin, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Subtitles: click the touch surface, swipe up to the action buttons, choose Subtitles; switch tracks and turn them off as the pass condition says. Check the path: the expected delivery is Transcode s:Encode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Stock Swiftfin build.",
+      "probeMinutes": 5,
+      "entriesS": [
+        180,
+        360
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "copy",
+          "subtitle": "External"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy",
+          "subtitle": "Embed"
+        },
+        "swiftfin-native": {
+          "method": "Transcode",
+          "subtitle": "Encode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 8-bit SDR 1080p 23.976; audio aac 6ch eng; subs 2x ass, 1x pgssub",
+          "runtimeMin": 29,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio ac3 2ch jpn, ac3 2ch eng; subs 2x pgssub",
+          "runtimeMin": 12,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "ac3",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "ac3",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "ac3",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I29",
+      "group": "Interaction",
+      "title": "Burn-in, resume on stock Swiftfin: ASS with fonts",
+      "dims": {
+        "delivery": "Transcode SDR (burn-in)",
+        "ops": "resume off-grid",
+        "player": "SF-AV",
+        "subs": "ASS with fonts"
+      },
+      "risk": "With -ss before the input, the subtitles filter sees timestamps from 0, so burned cues can shift by the resume offset unless the job keeps the source timestamps.",
+      "pass": "After the resume, picture and sound start together within 8 s at the saved position (within 2 s); then no stall, A/V drift or green frame for 5 min. Burned-in cues match the dialogue after the resume.",
+      "humanCheck": "Setup: stock Swiftfin, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Make a resume point: play from the beginning and press Back at about 2:58. On a film, play past 6% of the runtime instead (about 7:00 on a 110 min film): the server saves a position only after 5% of the runtime. The item page must then show Resume; choose it. If it shows only Play, no position was saved. Check the path: the expected delivery is Transcode s:Encode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Stock Swiftfin build; cue timing.",
+      "probeMinutes": 5,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "",
+          "subtitle": "External"
+        },
+        "sharkparty-vlc": {
+          "method": "",
+          "subtitle": "Embed"
+        },
+        "swiftfin-native": {
+          "method": "Transcode",
+          "subtitle": "Encode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio flac 6ch eng, flac 2ch jpn; subs 2x ass, 2x pgssub; 17 attachments",
+          "runtimeMin": 23,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit SDR 1080p 23.976; audio aac 2ch eng, opus 2ch jpn; subs 2x ass; 24 attachments",
+          "runtimeMin": 23,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "aac",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I30",
+      "group": "Interaction",
+      "title": "Transcode, next-episode autoplay: Hi10P anime with ASS",
+      "dims": {
+        "delivery": "Transcode SDR",
+        "ops": "next-episode autoplay",
+        "player": "SP-AV",
+        "subs": "ASS with fonts",
+        "video": "H.264 10-bit"
+      },
+      "risk": "Encoder handover between episodes and font extraction for the next file; SharkParty must load the next episode's ASS track.",
+      "pass": "Seek to the last minute; the next episode starts from 0 with sound and styled subtitles.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Next episode: scrub to the last 60 s and let the episode end without pressing anything; the next one must start by itself. Check the path: the expected delivery is Transcode s:External. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Autoplay and ASS on the next episode.",
+      "probeMinutes": 2,
+      "entriesS": [
+        -60
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Transcode",
+          "subtitle": "External"
+        },
+        "sharkparty-vlc": {
+          "method": "Transcode"
+        },
+        "swiftfin-native": {
+          "method": "Transcode",
+          "subtitle": "Encode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; h264 High 10 10-bit SDR 1080p 23.976; audio flac 2ch eng, flac 2ch jpn; subs 2x ass; 16 attachments",
+          "runtimeMin": 25,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "VideoProfileNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; h264 High 10 10-bit SDR 1080p 23.976; audio flac 2ch jpn, flac 2ch; subs 2x ass; 15 attachments",
+          "runtimeMin": 24,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "VideoProfileNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I31",
+      "group": "Interaction",
+      "title": "Transcode, dual audio switch: Hi10P anime Japanese to English",
+      "dims": {
+        "audio": "multiple tracks",
+        "delivery": "Transcode SDR",
+        "ops": "audio-track switch mid-play",
+        "player": "SP-AV",
+        "video": "H.264 10-bit"
+      },
+      "risk": "A common anime shape: the audio switch restarts the full video transcode at the current position, with the restart latency of a seek.",
+      "pass": "After the resume, picture and sound start together within 8 s at the saved position (within 2 s); then no stall, A/V drift or green frame for 5 min. Switch at about 5 min: the other language plays from the switch point.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Audio switch: at about 5:00, click the touch surface, swipe up to the action buttons, choose Audio and pick the other track. Check the path: the expected delivery is Transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 5,
+      "entriesS": [
+        300
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "Transcode"
+        },
+        "swiftfin-native": {
+          "method": "Transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; h264 High 10 10-bit SDR 1080p 23.976; audio flac 2ch eng, flac 2ch jpn; subs 2x ass; 16 attachments",
+          "runtimeMin": 25,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "VideoProfileNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; h264 High 10 10-bit SDR 1080p 23.976; audio flac 2ch jpn, flac 2ch; subs 2x ass; 15 attachments",
+          "runtimeMin": 24,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "VideoProfileNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "flac",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoProfileNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I32",
+      "group": "Interaction",
+      "title": "Tone map, resume: Dolby Vision 5 on SharkParty VLC",
+      "dims": {
+        "delivery": "Transcode HDR to SDR",
+        "ops": "resume off-grid",
+        "player": "SP-VLC",
+        "res": "4K",
+        "video": "Dolby Vision P5"
+      },
+      "risk": "VLC has no DOVI in its range list, so P5 transcodes with a tone map: a 4K decode, reshape and tone map must start within the client timeout and keep correct colors after the restart.",
+      "pass": "After the resume, picture and sound start together within 8 s at the saved position (within 2 s); then no stall, A/V drift or green frame for 5 min. Colors are correct (no purple or green cast); the TV is in SDR.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: VLC. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Make a resume point: play from the beginning and press Back at about 2:58. On a film, play past 6% of the runtime instead (about 7:00 on a 110 min film): the server saves a position only after 5% of the runtime. The item page must then show Resume; choose it. If it shows only Play, no position was saved. Check the path: the expected delivery is Transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Colors after the resume.",
+      "probeMinutes": 5,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux"
+        },
+        "sharkparty-vlc": {
+          "method": "Transcode"
+        },
+        "swiftfin-native": {
+          "method": "Remux"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVI 2160p 23.976; audio eac3 6ch fre, eac3 6ch eng; subs 4x subrip",
+          "runtimeMin": 58,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "VideoRangeTypeNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVI 2160p 23.976; audio eac3 6ch eng; subs 2x subrip",
+          "runtimeMin": 93,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "VideoRangeTypeNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I33",
+      "group": "Interaction",
+      "title": "Tone map, seek forward and back: 4K HDR10 + PGS burn-in on stock Swiftfin",
+      "dims": {
+        "delivery": "Transcode HDR (burn-in)",
+        "ops": "seek forward far, seek backward",
+        "player": "SF-AV",
+        "res": "4K",
+        "subs": "PGS",
+        "video": "HDR10"
+      },
+      "risk": "High-risk triple. Burn-in on a 4K HDR source is the heaviest job: 4K decode, overlay, tone map or HDR encode on the iGPU. It runs near realtime, so every seek risks a stall.",
+      "pass": "Each seek lands within 2 s of the target and resumes within 8 s; then no stall or A/V drift for 2 min. Colors are correct for the TV mode; PGS sits at the right size.",
+      "humanCheck": "Setup: stock Swiftfin, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub forward to 40:00, play 1 min, then scrub back to 10:00. Check the path: the expected delivery is Transcode s:Encode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Stock Swiftfin build; colors and stalls.",
+      "probeMinutes": 5,
+      "entriesS": [
+        2400,
+        600
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "subtitle": "External"
+        },
+        "sharkparty-vlc": {
+          "method": ""
+        },
+        "swiftfin-native": {
+          "method": "Transcode",
+          "subtitle": "Encode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit HDR10 2160p 23.976; audio truehd 8ch eng, truehd 8ch zho, ac3 6ch fra, +4; subs 10x pgssub",
+          "runtimeMin": 150,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "AudioCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit HDR10 2160p 23.976; audio truehd 8ch eng, ac3 6ch eng, aac 2ch eng, +1; subs 4x pgssub, 1x subrip",
+          "runtimeMin": 118,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "AudioCodecNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Transcode",
+              "audio": "transcode",
+              "audioCodec": "truehd",
+              "subtitle": "Encode",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "SubtitleCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I34",
+      "group": "Interaction",
+      "title": "Tone map, pause and background: Dolby Vision 5 on SharkParty VLC",
+      "dims": {
+        "delivery": "Transcode HDR to SDR",
+        "ops": "long pause, background/foreground",
+        "player": "SP-VLC",
+        "video": "Dolby Vision P5"
+      },
+      "risk": "The tone-map job is reaped during the pause; the restart must use the same tone-map settings, and the TV must stay in SDR.",
+      "pass": "After the resume, picture and sound start together within 8 s at the saved position (within 2 s); then no stall, A/V drift or green frame for 5 min. Pause 6 min, play, then 2 min on the home screen: colors stay correct.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: VLC. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Pause: press Play/Pause at about 3:00, wait 6 min (if the screen saver starts, press Play/Pause once to wake it), then press Play/Pause to play. Background: press the TV button for the Home screen, wait 2 min, then open the app again from Home. Check the path: the expected delivery is Transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Pause and background.",
+      "probeMinutes": 3,
+      "entriesS": [
+        178
+      ],
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux"
+        },
+        "sharkparty-vlc": {
+          "method": "Transcode"
+        },
+        "swiftfin-native": {
+          "method": "Remux"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVI 2160p 23.976; audio eac3 6ch fre, eac3 6ch eng; subs 4x subrip",
+          "runtimeMin": 58,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "VideoRangeTypeNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVI 2160p 23.976; audio eac3 6ch eng; subs 2x subrip",
+          "runtimeMin": 93,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "VideoRangeTypeNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I35",
+      "group": "Interaction",
+      "title": "Two concurrent streams: a 4K tone map and a 4K remux",
+      "dims": {
+        "delivery": "Transcode HDR to SDR + Remux a:copy",
+        "ops": "two concurrent streams",
+        "player": "SP-VLC",
+        "res": "4K"
+      },
+      "risk": "The heaviest GPU job beside the heaviest I/O job: the tone map must stay above realtime.",
+      "pass": "Play this item on SharkParty VLC and ATV-I01's item on another client for 5 min: no stall on either.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: VLC. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Second stream: start this item on the Apple TV, then the second item on another client (phone app or web). Check the path: the expected delivery is Transcode. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Transcode. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Needs a second client.",
+      "probeMinutes": 5,
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux"
+        },
+        "sharkparty-vlc": {
+          "method": "Transcode"
+        },
+        "swiftfin-native": {
+          "method": "Remux"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVI 2160p 23.976; audio eac3 6ch fre, eac3 6ch eng; subs 4x subrip",
+          "runtimeMin": 58,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "VideoRangeTypeNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVI 2160p 23.976; audio eac3 6ch eng; subs 2x subrip",
+          "runtimeMin": 93,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "Transcode",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "VideoRangeTypeNotSupported"
+              ]
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I36",
+      "group": "Interaction",
+      "title": "DirectPlay, resume and seek far on SharkParty VLC: 4K DV profile 7 + DTS-HD MA",
+      "dims": {
+        "audio": "DTS-HD MA",
+        "delivery": "DirectPlay",
+        "ops": "resume off-grid, seek forward far, seek backward",
+        "player": "SP-VLC",
+        "res": "4K",
+        "video": "Dolby Vision P7"
+      },
+      "risk": "A large UHD BD remux read by byte ranges: VLC seeks with the MKV Cues; a missing or late Cues element makes each seek read far into the file.",
+      "pass": "Each seek lands within 2 s of the target and resumes picture and sound together within 3 s; then no audio dropout or A/V drift for 2 min. Resume, then seek +30 min and back -15 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: VLC. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Resume is blocked on rc.8: the server saves no position for direct play. Until the fix lands, start from the beginning and scrub to the point instead. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub forward to +30 min, play 1 min, then scrub back to -15 min. Check the path: the expected delivery is DirectPlay a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Play. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 3,
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithEL 2160p 23.976; audio dts 6ch eng, dts 5ch eng, flac 2ch eng, +1; subs 25x pgssub, 11x subrip",
+          "runtimeMin": 96,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithEL 2160p 23.976; audio dts 6ch eng, ac3 2ch eng, ac3 2ch eng; subs 24x pgssub, 26x subrip",
+          "runtimeMin": 105,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I37",
+      "group": "Interaction",
+      "title": "DirectPlay, seek near end and next episode: MP4 H.264 episode",
+      "dims": {
+        "container": "MP4",
+        "delivery": "DirectPlay",
+        "ops": "seek near end, next-episode autoplay",
+        "player": "SP-AV",
+        "video": "H.264"
+      },
+      "risk": "A byte-range read at the end of the file (moov at the end needs an extra range); end of item reported by playstate, then the next PlaybackInfo.",
+      "pass": "A seek to the last 30 s plays to the end; the next episode starts by itself.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Seek: play 1 min, then click the touch surface to show the controls, then hold right (or left) on the clickpad ring, or swipe on the touch surface, to scrub; release and click to play. One click right or left jumps 15 s. Scrub to the last 30 s. Next episode: scrub to the last minute and let the episode end without pressing anything; the next one must start by itself. Check the path: the expected delivery is DirectPlay a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Play. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Autoplay.",
+      "probeMinutes": 2,
+      "expected": {
+        "sharkparty-native": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MOV; h264 High 8-bit SDR 404p 23.976; audio aac 2ch eng",
+          "runtimeMin": 40,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "swiftfin-native": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            }
+          }
+        },
+        {
+          "source": "MOV; h264 High 8-bit SDR 1080p 25.000; audio aac 2ch und",
+          "runtimeMin": 6,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "swiftfin-native": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I38",
+      "group": "Interaction",
+      "title": "DirectPlay, audio and subtitle switch on SharkParty VLC: DTS + a second track, PGS + SRT",
+      "dims": {
+        "audio": "multiple tracks",
+        "delivery": "DirectPlay",
+        "ops": "audio-track switch mid-play, subtitle on/off/switch",
+        "player": "SP-VLC",
+        "subs": "SRT + PGS"
+      },
+      "risk": "VLC switches tracks inside the file; the server sees only playstate. The chosen indexes must reach the saved user data for the next resume.",
+      "pass": "Starts in under 5 s; no audio dropout, A/V drift, stutter or green frames for the full play time; seeks land within 2 s of the target and resume audio and video together. The selected subtitle shows with correct timing; turning it off removes it. Each switch applies within 2 s; stop and resume keeps the chosen tracks.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: VLC. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Audio switch: at about 5:00, click the touch surface, swipe up to the action buttons, choose Audio and pick the other track. Subtitles: click the touch surface, swipe up to the action buttons, choose Subtitles; switch tracks and turn them off as the pass condition says. Check the path: the expected delivery is DirectPlay a:copy s:Embed. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Play. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result.",
+      "probeMinutes": 3,
+      "expected": {
+        "sharkparty-native": {
+          "method": "",
+          "subtitle": "External"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy",
+          "subtitle": "Embed"
+        },
+        "swiftfin-native": {
+          "method": ""
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; h264 High 8-bit SDR 1080p 23.976; audio dts 8ch eng, eac3 8ch eng, ac3 2ch eng; subs 19x pgssub, 3x subrip",
+          "runtimeMin": 123,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "copy",
+              "audioCodec": "eac3",
+              "subtitle": "Hls",
+              "transcodeReasons": [
+                "ContainerNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; h264 High 8-bit SDR 1080p 23.976; audio dts 2ch rus, ac3 2ch rus, dts 5ch rus, +9; subs 26x pgssub, 8x subrip",
+          "runtimeMin": 114,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "subtitle": "External",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts",
+              "subtitle": "Embed"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "subtitle": "Hls",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I39",
+      "group": "Interaction",
+      "title": "DirectPlay, pause over 5 min and background: MP4 H.264 movie",
+      "dims": {
+        "container": "MP4",
+        "delivery": "DirectPlay",
+        "ops": "long pause, background/foreground",
+        "player": "SP-AV"
+      },
+      "risk": "No server job, so this isolates the client: an idle HTTP connection closes and AVPlayer must reopen the range at the paused offset.",
+      "pass": "Pause 6 min, play: picture and sound within 3 s; then 2 min on the home screen and return at the same position.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: Native. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Pause: press Play/Pause at about 3:00, wait 6 min (if the screen saver starts, press Play/Pause once to wake it), then press Play/Pause to play. Background: press the TV button for the Home screen, wait 2 min, then open the app again from Home. Check the path: the expected delivery is DirectPlay a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Play. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Pause and background.",
+      "probeMinutes": 2,
+      "expected": {
+        "sharkparty-native": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        }
+      },
+      "runs": [
+        {
+          "source": "MOV; h264 High 8-bit SDR 818p 23.976; audio aac 2ch eng",
+          "runtimeMin": 121,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "swiftfin-native": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            }
+          }
+        },
+        {
+          "source": "MOV; h264 High 8-bit SDR 816p 23.976; audio aac 2ch und",
+          "runtimeMin": 108,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            },
+            "swiftfin-native": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "aac"
+            }
+          }
+        }
+      ],
+      "status": "pending",
+      "operator": {
+        "status": ""
+      }
+    },
+    {
+      "id": "ATV-I40",
+      "group": "Interaction",
+      "title": "Two concurrent 4K direct plays on SharkParty VLC",
+      "dims": {
+        "delivery": "DirectPlay",
+        "ops": "two concurrent streams",
+        "player": "SP-VLC",
+        "res": "4K"
+      },
+      "risk": "Two high-bitrate byte-range readers on one disk and one uplink; a seek on one must not starve the other.",
+      "pass": "Play this item on SharkParty VLC and a second 4K item on another client: no stall over 5 min.",
+      "humanCheck": "Setup: SharkParty, Settings \u003e Video player: VLC. Settings \u003e Video player \u003e Playback quality \u003e Device profile \u003e Compatibility must be Auto. Second stream: start this item on the Apple TV, then the second item on another client (phone app or web). Check the path: the expected delivery is DirectPlay a:copy. Until deadfin#635 ships, the Session panel Method reads Direct Play for every SharkParty session, so it does not prove the path: note the clock time you pressed Play, and the path is confirmed from the server ingress log. After deadfin#635, swipe down on the touch surface during play and open Session: Method must read Direct Play. If it reads anything else, the wrong player, setting or track is active: stop, fix the setup, and do not record a result. Needs a second client.",
+      "probeMinutes": 3,
+      "expected": {
+        "sharkparty-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        },
+        "sharkparty-vlc": {
+          "method": "DirectPlay",
+          "audio": "copy"
+        },
+        "swiftfin-native": {
+          "method": "Remux",
+          "audio": "transcode"
+        }
+      },
+      "runs": [
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 1632p 23.976; audio dts 6ch eng, ac3 2ch eng, ac3 2ch eng; subs 57x pgssub, 3x subrip",
+          "runtimeMin": 104,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        },
+        {
+          "source": "MKV; hevc Main 10 10-bit DOVIWithHDR10 2076p 23.976; audio dts 8ch eng, ac3 2ch eng; subs 55x pgssub, 3x subrip",
+          "runtimeMin": 130,
+          "decisions": {
+            "sharkparty-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            },
+            "sharkparty-vlc": {
+              "method": "DirectPlay",
+              "audio": "copy",
+              "audioCodec": "dts"
+            },
+            "swiftfin-native": {
+              "method": "Remux",
+              "audio": "transcode",
+              "audioCodec": "dts",
+              "transcodeReasons": [
+                "ContainerNotSupported",
+                "AudioCodecNotSupported",
+                "VideoCodecTagNotSupported"
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pending",
       "operator": {
         "status": ""
       }

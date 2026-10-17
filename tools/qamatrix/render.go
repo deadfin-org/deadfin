@@ -100,7 +100,7 @@ func expectText(e Expect) string {
 }
 
 func dimsText(d map[string]string) string {
-	order := []string{"container", "video", "range", "res", "fps", "audio", "subs", "ops"}
+	order := []string{"container", "video", "range", "res", "fps", "audio", "subs", "delivery", "ops", "player", "runtime"}
 	var parts []string
 	for _, k := range order {
 		if v := d[k]; v != "" {
@@ -274,7 +274,7 @@ func renderCoverage(m *Matrix) string {
 	}
 	var sb strings.Builder
 	sb.WriteString("\n| Dimension | Value | Cells with a library item |\n|---|---|---|\n")
-	for _, k := range []string{"container", "video", "res", "fps", "audio", "subs", "ops"} {
+	for _, k := range []string{"container", "video", "res", "fps", "audio", "subs", "delivery", "ops", "player", "runtime"} {
 		values := make([]string, 0, len(cov[k]))
 		for v := range cov[k] {
 			values = append(values, v)
