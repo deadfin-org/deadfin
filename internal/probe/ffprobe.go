@@ -178,6 +178,7 @@ type stream struct {
 	Profile            string                `json:"profile"`
 	CodecName          string                `json:"codec_name"`
 	CodecType          string                `json:"codec_type"`
+	ExtraData          string                `json:"extradata"`
 	SampleRate         string                `json:"sample_rate"`
 	Channels           *int32Value           `json:"channels"`
 	ChannelLayout      string                `json:"channel_layout"`

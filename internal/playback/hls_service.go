@@ -1543,6 +1543,7 @@ func (prepared preparedHLS) masterVariant() hls.MasterVariant {
 			Codec:       prepared.video.Codec,
 			Profile:     stringPointerValue(prepared.video.Profile),
 			Level:       hlsVideoLevel(prepared.video.Level),
+			HighTier:    prepared.video.HighTier,
 			BitDepth:    intPointerValue(prepared.video.BitDepth),
 			PixelFormat: stringPointerValue(prepared.video.PixelFormat),
 			Range:       hlsVideoRange(prepared.video),

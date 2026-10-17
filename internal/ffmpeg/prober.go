@@ -478,6 +478,7 @@ func (p Prober) args(inputPath string) []string {
 		"-v", "warning",
 		"-print_format", "json",
 		"-show_streams",
+		"-show_data",
 		"-show_chapters",
 		"-show_format",
 	)

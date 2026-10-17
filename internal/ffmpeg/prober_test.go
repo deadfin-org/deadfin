@@ -51,7 +51,7 @@ printf 'diagnostic that must not corrupt JSON' >&2
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	args := readLines(t, argv)
-	want := []string{"-analyzeduration", "200000000", "-probesize", "1000000000", "-v", "warning", "-print_format", "json", "-show_streams", "-show_chapters", "-show_format", "-show_frames", "-only_first_vframe", "-i", "/media/with spaces/movie.mkv"}
+	want := []string{"-analyzeduration", "200000000", "-probesize", "1000000000", "-v", "warning", "-print_format", "json", "-show_streams", "-show_data", "-show_chapters", "-show_format", "-show_frames", "-only_first_vframe", "-i", "/media/with spaces/movie.mkv"}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatalf("ffprobe argv = %#v\nwant %#v", args, want)
 	}
@@ -287,7 +287,7 @@ func TestProberOmitsFrameFlagsWhenFirstFrameCapabilityIsUnavailable(t *testing.T
 	if _, err := (Prober{Path: path, Timeout: fixtureTimeout, MaxOutput: 1024, ShowFrames: false}).Probe(context.Background(), "/media/unsupported.mkv"); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"-v", "warning", "-print_format", "json", "-show_streams", "-show_chapters", "-show_format", "-i", "/media/unsupported.mkv"}
+	want := []string{"-v", "warning", "-print_format", "json", "-show_streams", "-show_data", "-show_chapters", "-show_format", "-i", "/media/unsupported.mkv"}
 	if got := readLines(t, argv); !reflect.DeepEqual(got, want) {
 		t.Fatalf("ffprobe argv = %#v, want no -show_frames/-only_first_vframe %#v", got, want)
 	}

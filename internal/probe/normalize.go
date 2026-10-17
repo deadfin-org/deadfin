@@ -115,6 +115,7 @@ func normalizeStream(input stream, source *format, frames []frame, isAudio bool)
 	stream := playback.MediaStream{
 		Codec:          input.CodecName,
 		Profile:        optionalString(input.Profile),
+		HighTier:       hevcHighTier(input.CodecName, input.ExtraData),
 		Width:          intPointer(input.Width),
 		Height:         intPointer(input.Height),
 		Level:          levelPointer(input.Level),

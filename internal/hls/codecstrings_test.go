@@ -41,6 +41,16 @@ func TestVideoCodecStringMatchesPinnedRFC6381Vectors(t *testing.T) {
 			want:  "hvc1.2.4.L120.B0",
 		},
 		{
+			name:  "HEVC main 10 high tier profile level 153",
+			codec: hls.VideoCodec{Codec: "hevc", Profile: "main 10", Level: 153, HighTier: true},
+			want:  "hvc1.2.4.H153.B0",
+		},
+		{
+			name:  "HEVC main 10 unknown tier defaults to main",
+			codec: hls.VideoCodec{Codec: "hevc", Profile: "main 10", Level: 153},
+			want:  "hvc1.2.4.L153.B0",
+		},
+		{
 			name:  "HEVC main profile level 93",
 			codec: hls.VideoCodec{Codec: "h265", Profile: "main", Level: 93},
 			want:  "hvc1.1.4.L93.B0",

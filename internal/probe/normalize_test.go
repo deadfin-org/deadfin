@@ -1268,6 +1268,43 @@ func TestMediaStreamPlaybackPropertiesThroughProbeSeam(t *testing.T) {
 	}
 }
 
+func TestNormalizeReadsHEVCTierFromFFprobeExtradata(t *testing.T) {
+	const highTierHvcC = "\n00000000: 0121 0000 0000 0000 0000 0000 0000 0000  .!..............\n00000010: 0000 0000 0000 00  .......\n"
+	const mainTierHvcC = "\n00000000: 0101 0000 0000 0000 0000 0000 0000 0000  .................\n00000010: 0000 0000 0000 00  .......\n"
+	for _, tc := range []struct {
+		name         string
+		extradata    string
+		wantHighTier bool
+	}{
+		{name: "high tier", extradata: highTierHvcC, wantHighTier: true},
+		{name: "main tier", extradata: mainTierHvcC},
+		{name: "unknown tier", extradata: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := json.Marshal(map[string]any{
+				"streams": []any{map[string]any{
+					"index": 0, "codec_type": "video", "codec_name": "hevc", "profile": "Main 10",
+					"width": 1920, "height": 1080, "level": 153, "extradata": tc.extradata,
+				}},
+				"format": map[string]any{"format_name": "matroska"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			info, err := probe.Normalize(context.Background(), raw, probe.Options{Path: "/media/hevc.mkv", Protocol: "File", VideoType: "VideoFile"})
+			if err != nil {
+				t.Fatalf("Normalize(): %v", err)
+			}
+			if len(info.MediaStreams) != 1 {
+				t.Fatalf("MediaStreams = %#v, want one video stream", info.MediaStreams)
+			}
+			if got := info.MediaStreams[0].HighTier; got != tc.wantHighTier {
+				t.Errorf("HighTier = %t, want %t", got, tc.wantHighTier)
+			}
+		})
+	}
+}
+
 func TestMpegTimestampReadsExactly197Bytes(t *testing.T) {
 	cases := []struct {
 		name string

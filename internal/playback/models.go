@@ -538,6 +538,7 @@ type MediaStream struct {
 	ChannelLayout             *string                 `json:"ChannelLayout,omitempty"`
 	BitRate                   *int                    `json:"BitRate,omitempty"`
 	BitDepth                  *int                    `json:"BitDepth,omitempty"`
+	HighTier                  bool                    `json:"HevcHighTier,omitempty"`
 	RefFrames                 *int                    `json:"RefFrames,omitempty"`
 	PacketLength              *int                    `json:"PacketLength,omitempty"`
 	Channels                  *int                    `json:"Channels,omitempty"`
@@ -807,6 +808,8 @@ func (p TranscodingProfile) MarshalJSON() ([]byte, error) {
 
 func (s MediaStream) MarshalJSON() ([]byte, error) {
 	type wire MediaStream
+	public := s
+	public.HighTier = false
 	var displayTitle *string
 	if s.Type == StreamTypeAudio || s.Type == StreamTypeVideo || s.Type == StreamTypeSubtitle {
 		value := s.displayTitle()
@@ -821,7 +824,7 @@ func (s MediaStream) MarshalJSON() ([]byte, error) {
 		AudioSpatialFormat   string         `json:"AudioSpatialFormat"`
 		DisplayTitle         *string        `json:"DisplayTitle,omitempty"`
 		IsTextSubtitleStream bool           `json:"IsTextSubtitleStream"`
-	}{wire(s), s.ReferenceFrameRate(), mediaVideoRangeName(s.VideoRange()), s.VideoRangeType(), s.videoDoViTitle(), s.audioSpatialFormatName(), displayTitle, s.IsTextSubtitleStream()})
+	}{wire(public), s.ReferenceFrameRate(), mediaVideoRangeName(s.VideoRange()), s.VideoRangeType(), s.videoDoViTitle(), s.audioSpatialFormatName(), displayTitle, s.IsTextSubtitleStream()})
 }
 
 func mediaVideoRangeName(value VideoRange) string {
