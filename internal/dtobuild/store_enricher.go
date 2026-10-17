@@ -195,7 +195,7 @@ func (e storeEnricher) Enrich(ctx context.Context, values []item.Item, options s
 		}
 		matched := matchedUserData{}
 		if wantUserDataRows {
-			matched = matchingUserData(value, batch.UserData[value.ID])
+			matched = matchingUserData(value, store.UserDataInputsFor(value, graph.series), batch.UserData[value.ID])
 		}
 		if options.EnableUserData && userID != nil {
 			enrichment.UserData = dtoUserData(value.ID, matched)
@@ -577,8 +577,8 @@ type matchedUserData struct {
 
 // matchingUserData returns the first persisted row in the item's deterministic
 // user-data-key order, retaining the first key for an absent-row DTO.
-func matchingUserData(value item.Item, rows map[string]store.UserData) matchedUserData {
-	key, data, found := store.MatchUserDataRow(value, rows)
+func matchingUserData(value item.Item, inputs item.UserDataInputs, rows map[string]store.UserData) matchedUserData {
+	key, data, found := store.MatchUserDataRow(value, inputs, rows)
 	return matchedUserData{key: key, data: data, found: found}
 }
 

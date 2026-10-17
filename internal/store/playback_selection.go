@@ -17,9 +17,11 @@ import (
 
 // MatchUserDataRow returns the first persisted user-data row in the item's
 // canonical key order. When no row is present, key remains the first canonical
-// key so callers that project an absent row retain its compatible key.
-func MatchUserDataRow(value item.Item, rows map[string]UserData) (key string, data UserData, found bool) {
-	keys := item.UserDataKeys(value, item.UserDataInputs{})
+// key so callers that project an absent row retain its compatible key. An
+// episode's series must be in inputs: its first keys derive from the series
+// keys, and the write path stores the episode's row under the first one.
+func MatchUserDataRow(value item.Item, inputs item.UserDataInputs, rows map[string]UserData) (key string, data UserData, found bool) {
+	keys := item.UserDataKeys(value, inputs)
 	if len(keys) != 0 {
 		key = keys[0]
 	}
@@ -48,13 +50,56 @@ func (s *ItemStore) VersionUserData(ctx context.Context, userID dto.UUID, ids []
 	if err != nil {
 		return nil, err
 	}
+	series, err := s.userDataSeries(ctx, page.Items)
+	if err != nil {
+		return nil, err
+	}
 	for _, value := range page.Items {
-		_, data, found := MatchUserDataRow(value, projections.UserData[value.ID])
+		_, data, found := MatchUserDataRow(value, UserDataInputsFor(value, series), projections.UserData[value.ID])
 		if found {
 			result[value.ID] = data
 		}
 	}
 	return result, nil
+}
+
+// UserDataInputsFor returns the key inputs for value from a set of loaded
+// series items.
+func UserDataInputsFor(value item.Item, series map[dto.UUID]item.Item) item.UserDataInputs {
+	if value.SeriesID == nil {
+		return item.UserDataInputs{}
+	}
+	if related, found := series[*value.SeriesID]; found {
+		return item.UserDataInputs{Series: &related}
+	}
+	return item.UserDataInputs{}
+}
+
+// userDataSeries loads the series of every episode or season in values.
+func (s *ItemStore) userDataSeries(ctx context.Context, values []item.Item) (map[dto.UUID]item.Item, error) {
+	ids := make([]dto.UUID, 0)
+	seen := make(map[dto.UUID]struct{})
+	for _, value := range values {
+		if value.SeriesID == nil || value.Kind != item.KindEpisode && value.Kind != item.KindSeason {
+			continue
+		}
+		if _, found := seen[*value.SeriesID]; !found {
+			seen[*value.SeriesID] = struct{}{}
+			ids = append(ids, *value.SeriesID)
+		}
+	}
+	series := make(map[dto.UUID]item.Item, len(ids))
+	if len(ids) == 0 {
+		return series, nil
+	}
+	page, err := s.Query(ctx, ItemQuery{ItemIDs: ids, IncludeItemTypes: []item.Kind{item.KindSeries}})
+	if err != nil {
+		return nil, err
+	}
+	for _, value := range page.Items {
+		series[value.ID] = value
+	}
+	return series, nil
 }
 
 func deduplicatePlaybackSelectionIDs(ids []dto.UUID) []dto.UUID {
