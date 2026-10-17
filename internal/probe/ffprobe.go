@@ -171,6 +171,10 @@ type Result struct {
 	Chapters   []chapter        `json:"chapters"`
 	Frames     []frame          `json:"frames"`
 	MP3Gapless *mp3GaplessFacts `json:"deadfin_mp3_gapless"`
+	// HEVCExtradata holds the ffprobe -show_data extradata dump of each HEVC
+	// video stream by stream index; the prober reads it in a narrow second
+	// ffprobe run.
+	HEVCExtradata map[string]string `json:"deadfin_hevc_extradata"`
 }
 
 type stream struct {
@@ -178,6 +182,7 @@ type stream struct {
 	Profile            string                `json:"profile"`
 	CodecName          string                `json:"codec_name"`
 	CodecType          string                `json:"codec_type"`
+	ExtraData          string                `json:"extradata"`
 	SampleRate         string                `json:"sample_rate"`
 	Channels           *int32Value           `json:"channels"`
 	ChannelLayout      string                `json:"channel_layout"`

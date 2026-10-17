@@ -68,7 +68,7 @@ func TestStreamExtraRoundTripUsesPlainDecode(t *testing.T) {
 	depth, refs := 10, 4
 	level := 150.0
 	profile := "Main 10"
-	stream := playback.MediaStream{AverageFrameRate: &rate, BitDepth: &depth, RefFrames: &refs, Level: &level, Profile: &profile}
+	stream := playback.MediaStream{AverageFrameRate: &rate, BitDepth: &depth, HighTier: true, RefFrames: &refs, Level: &level, Profile: &profile}
 	extra, err := streamExtra(stream)
 	if err != nil {
 		t.Fatalf("stream extra: %v", err)
@@ -79,6 +79,13 @@ func TestStreamExtraRoundTripUsesPlainDecode(t *testing.T) {
 	var plain rawMediaStream
 	if err := json.Unmarshal([]byte(extra), &plain); err != nil {
 		t.Fatalf("plain decode of %s: %v", extra, err)
+	}
+	got, err := streamFromColumns(0, "Video", "hevc", nil, nil, false, false, false, nil, nil, nil, nil, nil, extra)
+	if err != nil {
+		t.Fatalf("stream from columns: %v", err)
+	}
+	if !got.HighTier {
+		t.Errorf("round-tripped HighTier = false, want true")
 	}
 }
 

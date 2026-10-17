@@ -83,6 +83,7 @@ type MasterVideo struct {
 	Codec       string
 	Profile     string
 	Level       int
+	HighTier    bool
 	BitDepth    int
 	PixelFormat string
 	Range       VideoRange
@@ -317,7 +318,7 @@ func masterVideoCodecString(source MasterVariant, video MasterVideo, directDolby
 		return ""
 	}
 	codec := VideoCodec{
-		Codec: video.Codec, Profile: video.Profile, Level: video.Level, BitDepth: video.BitDepth,
+		Codec: video.Codec, Profile: video.Profile, Level: video.Level, HighTier: video.HighTier, BitDepth: video.BitDepth,
 		Width: source.Width, Height: source.Height, PixelFormat: video.PixelFormat, FrameRate: source.FrameRate,
 	}
 	if directDolbyVision {

@@ -84,6 +84,26 @@ func TestHLSServiceMasterUsesSelectedSourceRFC6381CodecsForStreamCopy(t *testing
 	}
 }
 
+func TestHLSServiceMasterUsesHEVCHighTierForStreamCopy(t *testing.T) {
+	sourceInfo := progressiveCopySource("/media/hevc-high-tier.mkv")
+	video := &sourceInfo.MediaStreams[0]
+	profile, codec, bitDepth := "Main 10", "hevc", 10
+	level := 153.0
+	video.Codec, video.Profile, video.Level = codec, &profile, &level
+	video.BitDepth, video.HighTier = &bitDepth, true
+	service := newHLSService(&progressiveFakeSource{source: sourceInfo}, &hlsFakeManager{})
+	request := hlsMasterCopyRequest("hevc")
+
+	response, err := service.Master(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Master(): %v", err)
+	}
+	playlist := readHLSResponse(t, response)
+	if !strings.Contains(playlist, "CODECS=\"hvc1.2.4.H153.B0,mp4a.40.2\"") {
+		t.Errorf("stream-copy Master() playlist = %q, want high-tier HEVC Main 10 CODECS token", playlist)
+	}
+}
+
 func TestHLSServiceMasterProjectsSelectedVP9PixelFormatAndGeometry(t *testing.T) {
 	sourceInfo := progressiveCopySource("/media/vp9-feature.webm")
 	video := &sourceInfo.MediaStreams[0]

@@ -41,7 +41,7 @@ func VideoCodecString(codec VideoCodec) string {
 	case strings.EqualFold(codec.Codec, "h264"):
 		return h264CodecString(codec.Profile, codec.Level)
 	case strings.EqualFold(codec.Codec, "h265"), strings.EqualFold(codec.Codec, "hevc"):
-		return h265CodecString(codec.Profile, codec.Level)
+		return h265CodecString(codec.Profile, codec.Level, codec.HighTier)
 	case strings.EqualFold(codec.Codec, "av1"):
 		return av1CodecString(codec.Profile, codec.Level, codec.HighTier, codec.BitDepth)
 	case strings.EqualFold(codec.Codec, "vp9"):
@@ -97,12 +97,16 @@ func h264CodecString(profile string, level int) string {
 	return "avc1." + profileHex + levelHex
 }
 
-func h265CodecString(profile string, level int) string {
+func h265CodecString(profile string, level int, highTier bool) string {
 	profilePart := "1.4"
 	if strings.EqualFold(profile, "main10") || strings.EqualFold(profile, "main 10") {
 		profilePart = "2.4"
 	}
-	return "hvc1." + profilePart + ".L" + strconv.Itoa(level) + ".B0"
+	tier := "L"
+	if highTier {
+		tier = "H"
+	}
+	return "hvc1." + profilePart + "." + tier + strconv.Itoa(level) + ".B0"
 }
 
 func av1CodecString(profile string, level int, highTier bool, bitDepth int) string {

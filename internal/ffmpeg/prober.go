@@ -142,8 +142,14 @@ func (p Prober) run(ctx context.Context, operand, logicalPath string, source *so
 	commandCtx, cancel := context.WithTimeout(ctx, p.Timeout)
 	defer cancel()
 	output, err := p.probeJSON(commandCtx, p.args(operand), source)
-	if err != nil || !strings.EqualFold(filepath.Ext(logicalPath), ".mp3") {
-		return output, err
+	if err != nil {
+		return nil, err
+	}
+	if output, err = p.withHEVCExtradata(commandCtx, operand, output, source); err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(filepath.Ext(logicalPath), ".mp3") {
+		return output, nil
 	}
 	facts, err := p.mp3GaplessFacts(commandCtx, operand, output, source)
 	if err != nil {
@@ -437,23 +443,101 @@ func packetDurationTicks(duration, numerator, denominator int64) (int64, bool) {
 }
 
 func appendMP3GaplessFacts(raw []byte, facts mp3GaplessFact) ([]byte, error) {
-	encoded, err := json.Marshal(facts)
+	return appendProbeObject(raw, "deadfin_mp3_gapless", facts)
+}
+
+// appendProbeObject adds key with the JSON encoding of value to the probe
+// JSON object raw.
+func appendProbeObject(raw []byte, key string, value any) ([]byte, error) {
+	encoded, err := json.Marshal(value)
 	if err != nil {
-		return nil, fmt.Errorf("encoding MP3 gapless facts: %w", err)
+		return nil, fmt.Errorf("encoding %s: %w", key, err)
 	}
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) < 2 || trimmed[0] != '{' || trimmed[len(trimmed)-1] != '}' {
 		return nil, fmt.Errorf("ffprobe metadata is not an object")
 	}
-	result := make([]byte, 0, len(trimmed)+len(encoded)+24)
+	result := make([]byte, 0, len(trimmed)+len(encoded)+len(key)+4)
 	result = append(result, trimmed[:len(trimmed)-1]...)
-	if len(trimmed) > 2 {
+	if len(bytes.TrimSpace(trimmed[1:len(trimmed)-1])) > 0 {
 		result = append(result, ',')
 	}
-	result = append(result, `"deadfin_mp3_gapless":`...)
+	result = append(result, '"')
+	result = append(result, key...)
+	result = append(result, `":`...)
 	result = append(result, encoded...)
 	result = append(result, '}')
 	return result, nil
+}
+
+// hevcExtradataKey is the top-level key that carries the HEVC extradata
+// dumps, by stream index, in the probe JSON.
+const hevcExtradataKey = "deadfin_hevc_extradata"
+
+// withHEVCExtradata appends the extradata of each HEVC video stream to the
+// probe JSON. The HEVC tier is only in the hvcC or SPS extradata. The main
+// probe does not use -show_data: it dumps the extradata of every stream as
+// hex, and an attachment stream (an embedded font) grows the output about
+// 4.3 times its size, past MaxOutput for large font sets. A second, narrow
+// ffprobe run reads the video streams only, and only for a file with an
+// HEVC video stream. The tier is an optional refinement: a failed narrow
+// run keeps the main output, and the tier stays Main.
+func (p Prober) withHEVCExtradata(ctx context.Context, operand string, raw []byte, source *sourcefile.Source) ([]byte, error) {
+	if !hasHEVCVideo(raw) {
+		return raw, nil
+	}
+	output, err := p.probeJSON(ctx, []string{
+		"-v", "warning",
+		"-print_format", "json",
+		"-select_streams", "v",
+		"-show_entries", "stream=index,codec_name,extradata",
+		"-show_data",
+		"-i", operand,
+	}, source)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return raw, nil
+	}
+	var result struct {
+		Streams []struct {
+			Index     int    `json:"index"`
+			CodecName string `json:"codec_name"`
+			ExtraData string `json:"extradata"`
+		} `json:"streams"`
+	}
+	if err := json.Unmarshal(output, &result); err != nil {
+		return raw, nil
+	}
+	extradata := map[string]string{}
+	for _, stream := range result.Streams {
+		if strings.EqualFold(stream.CodecName, "hevc") && stream.ExtraData != "" {
+			extradata[strconv.Itoa(stream.Index)] = stream.ExtraData
+		}
+	}
+	if len(extradata) == 0 {
+		return raw, nil
+	}
+	return appendProbeObject(raw, hevcExtradataKey, extradata)
+}
+
+func hasHEVCVideo(raw []byte) bool {
+	var result struct {
+		Streams []struct {
+			CodecName string `json:"codec_name"`
+			CodecType string `json:"codec_type"`
+		} `json:"streams"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return false
+	}
+	for _, stream := range result.Streams {
+		if strings.EqualFold(stream.CodecType, "video") && strings.EqualFold(stream.CodecName, "hevc") {
+			return true
+		}
+	}
+	return false
 }
 
 func probeCommand(ctx context.Context, path string, args ...string) *exec.Cmd {

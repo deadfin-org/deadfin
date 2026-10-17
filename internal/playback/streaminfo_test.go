@@ -492,6 +492,18 @@ func TestMediaStreamReferenceFrameRateIsComputedAndWireSerialized(t *testing.T) 
 	}
 }
 
+func TestMediaStreamHEVCTierIsStoredButNotExposedOnWire(t *testing.T) {
+	stream := MediaStream{Codec: "hevc", HighTier: true}
+	encoded := mustMarshalJSON(t, stream)
+	var wire map[string]any
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := wire["HevcHighTier"]; exists {
+		t.Errorf("public media stream includes internal HevcHighTier field: %s", encoded)
+	}
+}
+
 func TestPlaybackModelWireDefaultsAndEnumCompatibility(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

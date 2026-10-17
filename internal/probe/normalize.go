@@ -64,6 +64,9 @@ func Normalize(ctx context.Context, raw []byte, options Options) (MediaInfo, err
 		ProviderIDs:     map[string]string{},
 	}
 	for _, input := range result.Streams {
+		if input.ExtraData == "" {
+			input.ExtraData = result.HEVCExtradata[strconv.Itoa(int(input.Index))]
+		}
 		if attachment, ok := normalizeAttachment(input); ok {
 			info.MediaAttachments = append(info.MediaAttachments, attachment)
 		}
@@ -115,6 +118,7 @@ func normalizeStream(input stream, source *format, frames []frame, isAudio bool)
 	stream := playback.MediaStream{
 		Codec:          input.CodecName,
 		Profile:        optionalString(input.Profile),
+		HighTier:       hevcHighTier(input.CodecName, input.ExtraData),
 		Width:          intPointer(input.Width),
 		Height:         intPointer(input.Height),
 		Level:          levelPointer(input.Level),
