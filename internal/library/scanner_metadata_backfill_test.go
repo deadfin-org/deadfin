@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1560,6 +1561,9 @@ func TestRefreshExistingMetadataCassetteProviderErrorKeepsItem(t *testing.T) {
 type blockingCassetteDoer struct {
 	configuration remotetest.Interaction
 	entered       chan struct{}
+	// enterOnce closes entered once. Do never reassigns entered, so the
+	// test goroutine can read the field without a race.
+	enterOnce sync.Once
 }
 
 func (d *blockingCassetteDoer) Do(request *http.Request) (*http.Response, error) {
@@ -1576,10 +1580,7 @@ func (d *blockingCassetteDoer) Do(request *http.Request) (*http.Response, error)
 		}, nil
 	}
 	// Block on the movie fetch until the context cancels.
-	if d.entered != nil {
-		close(d.entered)
-		d.entered = nil
-	}
+	d.enterOnce.Do(func() { close(d.entered) })
 	<-request.Context().Done()
 	return nil, context.Canceled
 }
