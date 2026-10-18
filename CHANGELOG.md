@@ -79,6 +79,11 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- Embedded text subtitles of large files load. One ffmpeg pass extracts
+  every embedded subtitle stream of a file into the subtitle cache, text
+  streams included, as upstream does. The first request waits for the pass
+  under `SubtitleExtractionTimeoutMinutes`; later requests read the cache. The
+  forced track of a 4K remux returned 500 after 30 s (#676, D-52).
 - `GET /UserItems/Resume` and `GET /Users/{userId}/Items/Resume` honor
   `parentId`: they return only the in-progress items under the series,
   season, folder, library, collection, or playlist. Before, they returned the

@@ -44,19 +44,33 @@ type subtitleExtraction struct {
 	locks     keyedLocks
 }
 
+// extractedEmbeddedSubtitle reports whether one extraction pass writes stream
+// to the cache (SubtitleEncoder.ExtractAllExtractableSubtitles): every
+// embedded text, PGS and VobSub stream that supports external delivery.
+func extractedEmbeddedSubtitle(stream MediaStream) bool {
+	return !stream.IsExternal && stream.SupportsExternalStream && stream.IsExtractableSubtitleStream()
+}
+
 // rawExtractedSubtitle reports whether the route serves the extracted file of
-// stream as is. Only ASS, SSA, PGS and VobSub keep their codec on
-// extraction; text codecs go through the request-scoped converter instead
-// (D-52).
+// stream as is. ASS, SSA, PGS and VobSub keep their codec on extraction;
+// other text codecs are extracted as SRT and then converted per request.
 func rawExtractedSubtitle(stream MediaStream) bool {
-	if stream.IsExternal || !stream.SupportsExternalStream || !stream.IsExtractableSubtitleStream() {
+	return extractedEmbeddedSubtitle(stream) && encoding.ExtractableSubtitleFormat(stream.Codec) != "srt"
+}
+
+// available reports whether source has an extraction cache. A source without
+// one (a non-GUID ID, as for Live TV) is converted from the media file.
+func (extraction *subtitleExtraction) available(source MediaSourceInfo) bool {
+	if extraction == nil || extraction.extractor == nil {
 		return false
 	}
-	return encoding.ExtractableSubtitleFormat(stream.Codec) != "srt"
+	_, err := mediaSourceCacheFolder(extraction.root, source.ID)
+	return err == nil
 }
 
 // extractedPath returns the cache file for stream. The caller must have
-// called ensure for the source first.
+// called ensure for the source first; the file is missing when the pass wrote
+// the stream empty.
 func (extraction *subtitleExtraction) extractedPath(source MediaSourceInfo, stream MediaStream) (string, error) {
 	folder, err := mediaSourceCacheFolder(extraction.root, source.ID)
 	if err != nil {
@@ -65,10 +79,12 @@ func (extraction *subtitleExtraction) extractedPath(source MediaSourceInfo, stre
 	return filepath.Join(folder, strconv.Itoa(stream.Index)+"."+encoding.ExtractableSubtitleExtension(stream.Codec)), nil
 }
 
-// ensure extracts, in one ffmpeg pass, every raw-served embedded subtitle
-// stream of source whose cache file is missing or stale. Like upstream, a
-// running extraction does not stop when the client disconnects; only the
-// wait for another request's extraction does.
+// ensure extracts, in one ffmpeg pass, every embedded subtitle stream of
+// source whose cache file is missing or stale. Like upstream, a running
+// extraction does not stop when the client disconnects; only the wait for
+// another request's extraction does. A stream that ffmpeg writes empty (a
+// track with no cues) gets no cache file; the other outputs of the pass are
+// kept, and the caller sees the missing file only for that stream.
 func (extraction *subtitleExtraction) ensure(ctx context.Context, source MediaSourceInfo, pinned *sourcefile.Source) error {
 	if extraction == nil || extraction.extractor == nil || extraction.root == "" {
 		return ErrExtractionUnavailable
@@ -87,7 +103,7 @@ func (extraction *subtitleExtraction) ensure(ctx context.Context, source MediaSo
 	var outputs []encoding.SubtitleExtraction
 	for index := range source.MediaStreams {
 		stream := &source.MediaStreams[index]
-		if !rawExtractedSubtitle(*stream) {
+		if !extractedEmbeddedSubtitle(*stream) {
 			continue
 		}
 		path, err := extraction.extractedPath(source, *stream)
@@ -134,11 +150,9 @@ func (extraction *subtitleExtraction) ensure(ctx context.Context, source MediaSo
 	for _, output := range outputs {
 		info, err := os.Stat(output.OutputPath)
 		if err != nil || info.Size() == 0 {
-			removeOutputs(outputs)
-			return fmt.Errorf("ffmpeg subtitle extraction failed for %s to %s", source.Path, output.OutputPath)
+			_ = os.Remove(output.OutputPath)
+			continue
 		}
-	}
-	for _, output := range outputs {
 		if strings.HasSuffix(output.OutputPath, "ass") {
 			if err := setASSFont(output.OutputPath); err != nil {
 				return err

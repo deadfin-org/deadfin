@@ -115,7 +115,7 @@ func TestSubtitleServiceExtractsEmbeddedASSAndPGSOnceAndServesThemUnchanged(t *t
 	source, _ := extractionFixture(t)
 	cache := t.TempDir()
 	const ass = "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nStyle: Default,Arial,48\n\n[Events]\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\pos(320,50)}Sign\n"
-	extractor := &fakeExtractor{content: map[string]string{".ass": ass, ".sup": "PG\x00\x00sup"}}
+	extractor := &fakeExtractor{content: map[string]string{".ass": ass, ".sup": "PG\x00\x00sup", ".srt": "1\n00:00:01,000 --> 00:00:02,000\nhi\n"}}
 	service := playback.NewSubtitleService(playback.SubtitleServiceConfig{
 		Sources:        &subtitleServiceSource{source: source},
 		Extractor:      extractor,
@@ -140,6 +140,7 @@ func TestSubtitleServiceExtractsEmbeddedASSAndPGSOnceAndServesThemUnchanged(t *t
 		"-nostdin", "-y", "-i", "/dev/fd/3",
 		"-map", "0:2", "-an", "-vn", "-c:s", "copy", "-flush_packets", "1", filepath.Join(folder, "3.ass"),
 		"-map", "0:3", "-an", "-vn", "-c:s", "copy", "-flush_packets", "1", filepath.Join(folder, "4.sup"),
+		"-map", "0:4", "-an", "-vn", "-c:s", "copy", "-flush_packets", "1", filepath.Join(folder, "5.srt"),
 	}
 	if extractor.runCount() != 1 || !reflect.DeepEqual(extractor.runs[0], wantArgs) {
 		t.Fatalf("extractor runs = %q, want one run %q", extractor.runs, wantArgs)
@@ -194,8 +195,85 @@ func TestSubtitleServiceRejectsImageConversionAndKeepsTextConversion(t *testing.
 	if response.File != nil || !strings.Contains(string(response.Body), "flat") || converter.calls != 1 {
 		t.Fatalf("Stream(ASS as vtt) = %#v with %d conversions, want converter output", response, converter.calls)
 	}
-	if extractor.runCount() != 0 {
-		t.Fatalf("extractor runs = %d for a conversion, want 0", extractor.runCount())
+	// SubtitleEncoder.GetReadableFile converts the extracted file, not the
+	// media file.
+	if extractor.runCount() != 1 {
+		t.Fatalf("extractor runs = %d for a conversion, want 1", extractor.runCount())
+	}
+	if job := converter.jobs[0]; job.StreamIndex != -1 || !strings.HasSuffix(job.Source.Name(), "3.ass") {
+		t.Fatalf("conversion job = stream %d of %q, want the extracted 3.ass", job.StreamIndex, job.Source.Name())
+	}
+}
+
+// QA cell ATV-I18: an embedded SRT stream of a large remux timed out after
+// 30 s because the per-request converter read the whole media file. Like
+// SubtitleEncoder.GetReadableFile, the first request now waits for one
+// extraction pass of every embedded stream, and every later request of any
+// stream of the file converts its small cache file.
+func TestSubtitleServiceConvertsEmbeddedTextFromTheExtractionCache(t *testing.T) {
+	source, _ := extractionFixture(t)
+	source.MediaStreams = append(source.MediaStreams, playback.MediaStream{Index: 10, Type: playback.StreamTypeSubtitle, Codec: "subrip", SupportsExternalStream: true})
+	cache := t.TempDir()
+	extractor := &fakeExtractor{content: map[string]string{".ass": "[Script Info]\n", ".sup": "PG", ".srt": "1\n00:00:01,000 --> 00:00:02,000\nhi\n"}}
+	converter := &subtitleServiceConverter{output: []byte("1\n00:00:01,000 --> 00:00:02,000\nhi\n")}
+	service := playback.NewSubtitleService(playback.SubtitleServiceConfig{
+		Sources:        &subtitleServiceSource{source: source},
+		Converter:      converter,
+		Extractor:      extractor,
+		ExtractionPath: cache,
+	})
+	for _, index := range []int{5, 10, 5} {
+		response, err := service.Stream(t.Context(), subtitleStreamRequest(index, "srt"))
+		if err != nil {
+			t.Fatalf("Stream(%d as srt): %v", index, err)
+		}
+		if !strings.Contains(string(response.Body), "hi") {
+			t.Fatalf("Stream(%d as srt) body = %q", index, response.Body)
+		}
+	}
+	if extractor.runCount() != 1 {
+		t.Fatalf("extractor runs = %d, want one pass for every stream", extractor.runCount())
+	}
+	folder := filepath.Join(cache, "0a", "0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9")
+	if converter.calls != 2 {
+		t.Fatalf("conversions = %d, want 2 (the repeat request is a memory-cache hit)", converter.calls)
+	}
+	for call, want := range []string{"5.srt", "10.srt"} {
+		job := converter.jobs[call]
+		if job.StreamIndex != -1 || job.Source.Name() != filepath.Join(folder, want) {
+			t.Fatalf("conversion %d = stream %d of %q, want %s", call, job.StreamIndex, job.Source.Name(), want)
+		}
+	}
+}
+
+// A stream that ffmpeg writes empty (a track with no cues) fails only its own
+// request; the other outputs of the pass stay cached.
+func TestSubtitleServiceKeepsOtherOutputsWhenOneExtractionIsEmpty(t *testing.T) {
+	source, _ := extractionFixture(t)
+	cache := t.TempDir()
+	extractor := &fakeExtractor{content: map[string]string{".ass": "[Script Info]\n", ".sup": "PG"}}
+	service := playback.NewSubtitleService(playback.SubtitleServiceConfig{
+		Sources:        &subtitleServiceSource{source: source},
+		Converter:      &subtitleServiceConverter{output: []byte("x")},
+		Extractor:      extractor,
+		ExtractionPath: cache,
+	})
+	response, err := service.Stream(t.Context(), subtitleStreamRequest(3, "ass"))
+	if err != nil {
+		t.Fatalf("Stream(ass) with an empty SRT output: %v", err)
+	}
+	_ = response.File.Close()
+	if _, err := service.Stream(t.Context(), subtitleStreamRequest(5, "srt")); err == nil {
+		t.Fatal("Stream(empty srt) error = nil")
+	}
+	if response, err = service.Stream(t.Context(), subtitleStreamRequest(4, "sup")); err != nil {
+		t.Fatalf("Stream(sup): %v", err)
+	}
+	_ = response.File.Close()
+	// The empty stream is retried, as upstream retries a stream without a
+	// cache file; the fresh ASS and PGS files are not extracted again.
+	if got := extractor.runs[len(extractor.runs)-1]; extractor.runCount() != 3 || len(got) != 4+9 || !strings.HasSuffix(got[len(got)-1], "5.srt") {
+		t.Fatalf("extractor runs = %q, want later passes for 5.srt only", extractor.runs)
 	}
 }
 

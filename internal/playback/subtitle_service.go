@@ -201,8 +201,21 @@ func (service *SubtitleService) Stream(ctx context.Context, request SubtitleStre
 		Inode:      source.FileFacts.Inode,
 		ChangedAt:  source.FileFacts.ChangedAt,
 	}
-	if stream.IsExternal {
+	switch {
+	case stream.IsExternal:
 		inputPath, streamIndex = stream.Path, -1
+		expected = sourcefile.Expected{}
+	case extractedEmbeddedSubtitle(*stream) && service.extraction.available(source):
+		// SubtitleEncoder.GetReadableFile: one pass extracts every embedded
+		// subtitle stream of the file into the cache, and the request
+		// converts the small cache file. The first request waits for the
+		// pass, up to SubtitleExtractionTimeoutMinutes; later requests and
+		// the other streams of the file are cache hits.
+		extracted, err := service.extractedFile(ctx, source, *stream)
+		if err != nil {
+			return SubtitleResponse{}, err
+		}
+		inputPath, streamIndex = extracted, -1
 		expected = sourcefile.Expected{}
 	}
 	pinned, err := sourcefile.Open(inputPath, expected)
@@ -301,7 +314,14 @@ func (service *SubtitleService) extractedFile(ctx context.Context, source MediaS
 	if err := service.extraction.ensure(ctx, source, pinned); err != nil {
 		return "", err
 	}
-	return service.extraction.extractedPath(source, stream)
+	path, err := service.extraction.extractedPath(source, stream)
+	if err != nil {
+		return "", err
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() == 0 {
+		return "", fmt.Errorf("ffmpeg subtitle extraction failed for %s to %s", source.Path, path)
+	}
+	return path, nil
 }
 
 // extractedSubtitle extracts the embedded streams of source when needed and
