@@ -553,6 +553,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		Manager:             hlsTranscodeManager{manager: transcodes},
 		Subtitles:           subtitleService,
 		Attachments:         attachmentService,
+		AudioStart:          ffmpeg.Prober{Path: applicationFFProbePath, Timeout: 30 * time.Second},
 	})
 	trickplayReader = trickplay.NewReaderService(trickplay.ReaderServiceConfig{
 		Metadata: trickplayMetadata,

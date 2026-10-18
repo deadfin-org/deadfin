@@ -30,7 +30,15 @@ type HLSJob struct {
 	// whatever the start point. StartOffsetTicks is then the exact input
 	// seek, inside the start GOP; the caller chooses it from the keyframes.
 	KeyframeCuts bool
+	// PadAudioStart makes an audio transcode start at the job start with
+	// silence when the source audio stream starts later than the video
+	// (deadfin#681, D-82). Stream copy cannot pad, so it requires an audio
+	// transcode.
+	PadAudioStart bool
 }
+
+// hlsPadSampleRate is the pad filter output rate when the job sets none.
+const hlsPadSampleRate = 48_000
 
 // BuildHLSArgs builds logical ffmpeg argv tokens for a video-on-demand HLS
 // playlist. The returned tokens are ready for exec; they are not shell escaped.
@@ -58,7 +66,7 @@ func BuildHLSArgs(job HLSJob, caps Capabilities) ([]string, error) {
 	if job.Live && encodingJob.OutputContainer == "ts" {
 		args = append(args, "-flags", "-global_header")
 	}
-	args = appendHLSAudioArgs(args, encodingJob, caps)
+	args = appendHLSAudioArgs(args, encodingJob, caps, job.PadAudioStart)
 	args = appendHLSTimestampArgs(args)
 	return appendHLSOutputArgs(args, job, caps), nil
 }
@@ -92,6 +100,23 @@ func validateHLSJob(job HLSJob, caps Capabilities) error {
 	if job.StartNumber < 0 {
 		return fmt.Errorf("hls start number must not be negative")
 	}
+	if job.PadAudioStart && (job.AudioStream.Codec == "" || job.OutputAudioCodec == "" || job.OutputAudioCodec == "copy") {
+		return fmt.Errorf("hls audio start padding requires an audio transcode")
+	}
+	if isHLSDolbyAudioEncoder(job.OutputAudioCodec) {
+		// A late AC3 or E-AC3 track of a client that accepts no AAC is
+		// re-encoded to its own codec with ffmpeg's native encoder (D-82).
+		// No other HLS job encodes these codecs (D-50).
+		if !job.PadAudioStart {
+			return fmt.Errorf("hls %s encoding requires audio start padding", job.OutputAudioCodec)
+		}
+		if job.OutputAudioBitrate <= 0 {
+			return fmt.Errorf("audio transcode requires a positive bitrate")
+		}
+		// The shared audio validator knows only copy and AAC. job is a
+		// copy, so the rest of the checks see the stream as a copy.
+		job.OutputAudioCodec = "copy"
+	}
 	if job.OutputContainer != "ts" && job.OutputContainer != "fmp4" {
 		return fmt.Errorf("unsupported HLS segment container %q", job.OutputContainer)
 	}
@@ -113,6 +138,10 @@ func validateHLSJob(job HLSJob, caps Capabilities) error {
 		}
 	}
 	return validateVideoJob(job.EncodingJob, caps, true)
+}
+
+func isHLSDolbyAudioEncoder(codec string) bool {
+	return codec == "ac3" || codec == "eac3"
 }
 
 func isAudioOnlyHLSJob(job EncodingJob) bool {
@@ -368,7 +397,7 @@ func appendHLSTimestampArgs(args []string) []string {
 	return append(args, "-copyts", "-avoid_negative_ts", "disabled")
 }
 
-func appendHLSAudioArgs(args []string, job EncodingJob, caps Capabilities) []string {
+func appendHLSAudioArgs(args []string, job EncodingJob, caps Capabilities, padStart bool) []string {
 	if job.AudioStream.Codec == "" {
 		return args
 	}
@@ -396,10 +425,30 @@ func appendHLSAudioArgs(args []string, job EncodingJob, caps Capabilities) []str
 	if job.OutputAudioSampleRate > 0 {
 		args = append(args, "-ar", strconv.Itoa(job.OutputAudioSampleRate))
 	}
+	filters := make([]string, 0, 2)
 	if filter := hlsScopedAudioFilter(job); filter != "" {
-		args = append(args, "-af", filter)
+		filters = append(filters, filter)
+	}
+	if padStart {
+		filters = append(filters, hlsAudioStartPadFilter(job))
+	}
+	if len(filters) != 0 {
+		args = append(args, "-af", strings.Join(filters, ","))
 	}
 	return args
+}
+
+// hlsAudioStartPadFilter fills the time between the job start and the first
+// source audio frame with silence. The timestamps are the source timestamps
+// (-copyts), so first_pts is the job start in samples of the output rate.
+// async=1 also fills later gaps in the source track.
+func hlsAudioStartPadFilter(job EncodingJob) string {
+	rate := job.OutputAudioSampleRate
+	if rate <= 0 {
+		rate = hlsPadSampleRate
+	}
+	firstPTS := max(job.StartOffsetTicks, 0) * int64(rate) / 10_000_000
+	return "aresample=osr=" + strconv.Itoa(rate) + ":async=1:first_pts=" + strconv.FormatInt(firstPTS, 10)
 }
 
 func appendHLSAudioBitstreamArgs(args []string, job EncodingJob, caps Capabilities, flag string) []string {
@@ -475,8 +524,15 @@ func appendHLSOutputArgs(args []string, job HLSJob, caps Capabilities) []string 
 		segmentExtension = ".mp4"
 	}
 
+	args = append(args, "-max_muxing_queue_size", strconv.Itoa(hlsMuxingQueueSize))
+	if job.PadAudioStart {
+		// The pad starts only when the first source audio frame arrives. Until
+		// then the muxer holds the video, so the first segments get the
+		// leading silence and the init segment gets the audio decoder
+		// configuration (dac3 for AC3).
+		args = append(args, "-max_interleave_delta", "0")
+	}
 	args = append(args,
-		"-max_muxing_queue_size", strconv.Itoa(hlsMuxingQueueSize),
 		"-f", "hls",
 		"-max_delay", strconv.Itoa(hlsMaxDelayMicroseconds),
 		"-hls_time", hlsTimeArg(job),

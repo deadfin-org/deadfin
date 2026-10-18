@@ -79,6 +79,12 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- HLS plays an audio track that starts late. A track whose first packet is
+  more than 1 s into the file is encoded with leading silence instead of
+  copied: AAC when the client accepts it, else AC3 or E-AC3. A copied late
+  AC3 track gave an init segment without `dac3` and first segments without
+  audio, and AVPlayer failed the item at once. The Italian stereo track of a
+  4K remux starts at 33.55 s (#681, D-82).
 - Embedded text subtitles of large files load. One ffmpeg pass extracts
   every embedded subtitle stream of a file into the subtitle cache, text
   streams included, as upstream does. The first request waits for the pass

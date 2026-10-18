@@ -128,6 +128,9 @@ type HLSServiceConfig struct {
 	// file.
 	Subtitles   *SubtitleService
 	Attachments *AttachmentService
+	// AudioStart finds an audio stream that starts late, which HLS then
+	// encodes with leading silence instead of copying (D-82). Nil copies.
+	AudioStart AudioStartProber
 }
 
 // HLSRequest carries the stream-negotiated facts shared by all HLS endpoints.
@@ -177,6 +180,7 @@ type HLSService struct {
 	manager      HLSManager
 	subtitles    *SubtitleService
 	attachments  *AttachmentService
+	audioStarts  *hlsAudioStarts
 }
 
 // NewHLSService creates the handler-facing HLS service.
@@ -192,6 +196,7 @@ func NewHLSService(config HLSServiceConfig) *HLSService {
 		manager:      config.Manager,
 		subtitles:    config.Subtitles,
 		attachments:  config.Attachments,
+		audioStarts:  &hlsAudioStarts{prober: config.AudioStart},
 	}
 }
 
@@ -592,6 +597,7 @@ func (service *HLSService) prepareHLS(ctx context.Context, request HLSRequest, k
 
 	job := hlsEncodingJob(source, video, audio, subtitle, hlsRenditionIdentityOutputPath, request, videoCodec)
 	job.Hardware = hardware
+	service.padLateAudio(ctx, source, audio, request, &job)
 	service.useSubtitleCaches(ctx, source, subtitle, &job)
 	job.Live = request.Live
 	job.StartOffsetTicks = 0
