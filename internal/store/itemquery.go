@@ -438,6 +438,8 @@ func Translate(query ItemQuery, d Dialect) (TranslatedItemQuery, error) {
 	source := "items"
 	if !strings.Contains(where, resumeWinnerCTEReference) {
 		source, where, filterArgs = applyRecursiveParentScope(structuralQuery, d, where, filterArgs)
+	} else {
+		where, filterArgs = applyResumeParentScope(structuralQuery, d, where, filterArgs)
 	}
 	withSQL, selectedIDs, transformedArgs, err := translateItemQueryIDRelation(structuralQuery, d, source, where, filterArgs)
 	if err != nil {
@@ -589,6 +591,43 @@ func applyRecursiveParentScope(query ItemQuery, d Dialect, where string, args []
 		return source, " WHERE " + join, args
 	}
 	return source, " WHERE " + join + " AND " + strings.TrimPrefix(where, " WHERE "), args
+}
+
+// applyResumeParentScope is the recursive ParentId scope of a resumable
+// query. The Resume rewrite needs "SELECT id FROM items" as the filtered_ids
+// source, so applyRecursiveParentScope cannot drive the relation from the
+// subtree. The subtree is a predicate instead; resume_winner_ids already
+// bounds the candidates to the user's in-progress items. The subtree selects
+// the same rows as applyRecursiveParentScope (GetResumeItems passes ParentId
+// with Recursive = true, ItemsController.cs:984-985).
+func applyResumeParentScope(query ItemQuery, d Dialect, where string, args []any) (string, []any) {
+	if !query.Recursive || query.ParentID == nil || query.ParentID.IsNil() || query.recursiveParent == nil {
+		return where, args
+	}
+	parent := uuidArgDialect(d, *query.ParentID)
+	mark := func() string {
+		args = append(args, parent)
+		return d.Placeholder(len(args))
+	}
+	var clause string
+	switch query.recursiveParent.kind {
+	case "":
+		clause = "1 = 0"
+	case item.KindCollectionFolder.String(), item.KindUserView.String():
+		if query.recursiveParent.topParent {
+			clause = "items.top_parent_id = " + mark()
+		} else {
+			clause = "(items.top_parent_id = " + mark() + " OR items.id IN (SELECT item_id FROM ancestors WHERE ancestor_id = " + mark() + "))"
+		}
+	case item.KindPlaylist.String(), item.KindBoxSet.String():
+		clause = "items.id IN (SELECT child_item_id FROM linked_children WHERE parent_item_id = " + mark() + ")"
+	default:
+		clause = "items.id IN (SELECT item_id FROM ancestors WHERE ancestor_id = " + mark() + ")"
+	}
+	if where == "" {
+		return " WHERE " + clause, args
+	}
+	return where + " AND " + clause, args
 }
 
 // hiddenDefaultInventoryItemsClause excludes implementation roots and every

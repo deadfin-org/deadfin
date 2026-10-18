@@ -2110,6 +2110,9 @@ func registerRoutes(rt *router.Router, services routeServices) {
 	handlers.RegisterQuickConnect(rt, services.clock, func() bool { return services.manager != nil && services.manager.System().QuickConnectAvailable }, services.login, services.users, services.sessions, services.items, services.itemBuilder, services.identity)
 	handlers.RegisterDisplayPreferences(rt, services.displayPreferences)
 	itemDependencies := []any{handlers.ItemServices{Users: services.users, LatestPreferences: handlers.NewLatestUserPreferences(services.users), Languages: services.localization}, services.downloadFiles, services.manager}
+	if services.sessions != nil {
+		itemDependencies = append(itemDependencies, services.sessions)
+	}
 	if services.people != nil {
 		itemDependencies = append(itemDependencies, services.people)
 	}

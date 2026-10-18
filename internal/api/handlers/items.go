@@ -4,6 +4,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -17,9 +18,21 @@ import (
 	"github.com/deadfin-org/deadfin/internal/dtobuild"
 	"github.com/deadfin-org/deadfin/internal/item"
 	"github.com/deadfin-org/deadfin/internal/playback"
+	"github.com/deadfin-org/deadfin/internal/session"
 	"github.com/deadfin-org/deadfin/internal/store"
 	"github.com/go-chi/chi/v5"
 )
+
+// ActiveSessionLister lists the live sessions. GET /UserItems/Resume reads it
+// for excludeActiveSessions.
+type ActiveSessionLister interface {
+	Sessions(session.Query) []session.Snapshot
+}
+
+// ItemVersionSources resolves the alternate-version source graph of an item.
+type ItemVersionSources interface {
+	MediaSourceRecords(context.Context, dto.UUID) ([]playback.MediaSourceRecord, error)
+}
 
 // ItemReader is the narrow read seam required by the item page endpoint.
 type ItemReader interface {
@@ -54,6 +67,7 @@ func RegisterItems(rt *router.Router, reader ItemReader, build ItemDTOBuilder, c
 	var downloadFiles playback.DownloadFileSourceService
 	var configuration ShowsConfiguration
 	var people PersonRefresher
+	var sessions ActiveSessionLister
 	for _, dependency := range dependencies {
 		switch value := dependency.(type) {
 		case ItemServices:
@@ -68,9 +82,11 @@ func RegisterItems(rt *router.Router, reader ItemReader, build ItemDTOBuilder, c
 			configuration = value
 		case PersonRefresher:
 			people = value
+		case ActiveSessionLister:
+			sessions = value
 		}
 	}
-	h := itemHandler{reader: reader, build: build, clock: clock, users: users, latestPreferences: latestPreferences, configuration: configuration, people: people}
+	h := itemHandler{reader: reader, build: build, clock: clock, users: users, latestPreferences: latestPreferences, configuration: configuration, people: people, sessions: sessions}
 	userData, _ := reader.(UserDataMutator)
 	policy := string(auth.PolicyDefaultAuthorization)
 	rt.Handle(http.MethodGet, "/Items", router.Route{OperationID: "GetItems", Policy: policy}, h.items)
@@ -97,6 +113,7 @@ type itemHandler struct {
 	latestPreferences LatestUserPreferences
 	configuration     ShowsConfiguration
 	people            PersonRefresher
+	sessions          ActiveSessionLister
 }
 
 func (h itemHandler) items(w http.ResponseWriter, request *http.Request) {
@@ -216,22 +233,43 @@ func (h itemHandler) resumeForUser(w http.ResponseWriter, request *http.Request,
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	var options struct {
+		ExcludeActiveSessions bool `query:"ExcludeActiveSessions"`
+	}
+	if err := bind.QueryRequest(request, &options); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
 	if !h.applyRequestUser(w, request, user, &query) {
 		return
 	}
+	// ItemsController.GetResumeItems, ItemsController.cs:978-997.
 	trueValue, falseValue := true, false
 	query.IsResumable = &trueValue
 	query.Recursive = true
+	query.IsVirtualItem = &falseValue
 	query.IncludeOwnedItems = true
 	query.CollapseBoxSetItems = &falseValue
 	query.SortBy = []store.ItemSortBy{store.ItemSortByDatePlayed}
 	query.SortOrder = []store.SortOrder{store.SortOrderDescending}
+	if options.ExcludeActiveSessions && query.UserID != nil {
+		active, err := h.activeSessionItemIDs(request.Context(), *query.UserID)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		query.ExcludeItemIDs = append(query.ExcludeItemIDs, active...)
+	}
 	result, err := h.reader.Query(request.Context(), query)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	result.Items = filterLatestExcludedItems(result.Items, query.User)
+	// The LatestItemExcludes preference narrows only the unscoped list
+	// (ItemsController.cs:953-961).
+	if query.ParentID == nil || query.ParentID.IsNil() {
+		result.Items = filterLatestExcludedItems(result.Items, query.User)
+	}
 	page, err := h.build.Build(request.Context(), result.Items, query.DtoOptions, query.UserID)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -242,6 +280,48 @@ func (h itemHandler) resumeForUser(w http.ResponseWriter, request *http.Request,
 		page.StartIndex = *query.StartIndex
 	}
 	_ = render.JSON(w, request, http.StatusOK, page)
+}
+
+// activeSessionItemIDs ports the excludeActiveSessions expansion of
+// GetResumeItems (ItemsController.cs:964-976): the item each of the user's
+// sessions is playing, and every alternate version of that item, because the
+// resume list shows the version that was played.
+func (h itemHandler) activeSessionItemIDs(ctx context.Context, userID dto.UUID) ([]dto.UUID, error) {
+	if h.sessions == nil {
+		return nil, nil
+	}
+	versions, _ := h.reader.(ItemVersionSources)
+	var ids []dto.UUID
+	seen := map[dto.UUID]struct{}{}
+	add := func(id dto.UUID) {
+		if _, found := seen[id]; !found {
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+	for _, snapshot := range h.sessions.Sessions(session.Query{}) {
+		if snapshot.UserID != userID || snapshot.NowPlaying == nil || snapshot.NowPlaying.ItemID.IsNil() {
+			continue
+		}
+		playing := snapshot.NowPlaying.ItemID
+		add(playing)
+		if versions == nil {
+			continue
+		}
+		records, err := versions.MediaSourceRecords(ctx, playing)
+		if errors.Is(err, store.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, record := range records {
+			if !record.ID.IsNil() {
+				add(record.ID)
+			}
+		}
+	}
+	return ids, nil
 }
 
 func (h itemHandler) itemsForUser(w http.ResponseWriter, request *http.Request, user string) {

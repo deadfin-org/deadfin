@@ -79,6 +79,13 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- `GET /UserItems/Resume` and `GET /Users/{userId}/Items/Resume` honor
+  `parentId`: they return only the in-progress items under the series,
+  season, folder, library, collection, or playlist. Before, they returned the
+  whole resume list, so the series Play button in Swiftfin played an
+  unrelated movie. `excludeActiveSessions` now drops the items the user is
+  playing, and the Latest exclusions apply only to the unscoped list, as
+  upstream does (#674).
 - Sessions report the real play method. A report with no `PlayMethod` is
   `Transcode` while a transcoding job runs for its `PlaySessionId`, else
   `DirectPlay`, as upstream does. `/Sessions` carries `TranscodingInfo` for a
