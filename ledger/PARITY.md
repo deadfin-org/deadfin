@@ -5,9 +5,9 @@ Edit `ledger/annotations.yaml` and `ledger/shadow-spec.yaml`, then run `make led
 
 ## Source
 
-- Deadfin revision: `539eb51ad60df4d96a3eab27fa52086d75dafbf2`
+- Deadfin revision: `46fd154a9d1aa4ac0ad91ef3b6bb786489de7090`
 - Jellyfin pin: `b04614e18d2aeed8d3d3de920c381c6bd5b97bdb`
-- Route count: 272
+- Route count: 337
 - OpenAPI version: 12.0.0
 
 ## Swiftfin REST parity
@@ -30,26 +30,26 @@ These SDK conveniences are not counted in the REST parity fraction:
 
 | Subsystem | Done | Partial | Stubbed | Deferred | Todo | Total |
 |---|---|---|---|---|---|---|
-| Artist | 0 | 1 | 0 | 2 | 0 | 3 |
+| Artist | 0 | 3 | 0 | 0 | 0 | 3 |
 | Audio | 0 | 6 | 0 | 0 | 0 | 6 |
-| Authentication | 0 | 6 | 0 | 7 | 0 | 13 |
+| Authentication | 0 | 9 | 0 | 4 | 0 | 13 |
 | Backup | 0 | 4 | 0 | 0 | 0 | 4 |
 | Branding | 0 | 3 | 0 | 0 | 0 | 3 |
 | Channel | 0 | 0 | 0 | 5 | 0 | 5 |
-| Collection | 0 | 1 | 0 | 2 | 0 | 3 |
+| Collection | 0 | 3 | 0 | 0 | 0 | 3 |
 | Device | 0 | 0 | 0 | 5 | 0 | 5 |
 | DisplayPreference | 0 | 2 | 0 | 0 | 0 | 2 |
 | Environment | 0 | 5 | 0 | 0 | 0 | 5 |
 | Filter | 0 | 2 | 0 | 0 | 0 | 2 |
-| Genre | 0 | 1 | 0 | 1 | 0 | 2 |
+| Genre | 0 | 2 | 0 | 0 | 0 | 2 |
 | HLS | 0 | 14 | 0 | 0 | 0 | 14 |
-| Image | 0 | 12 | 0 | 25 | 0 | 37 |
+| Image | 0 | 35 | 0 | 2 | 0 | 37 |
 | Images | 0 | 0 | 0 | 6 | 0 | 6 |
 | InstantMix | 0 | 0 | 0 | 8 | 0 | 8 |
 | ItemLookup | 0 | 11 | 0 | 0 | 0 | 11 |
-| ItemUpdate | 0 | 0 | 0 | 3 | 0 | 3 |
+| ItemUpdate | 0 | 3 | 0 | 0 | 0 | 3 |
 | Items | 0 | 3 | 0 | 1 | 0 | 4 |
-| Library | 0 | 20 | 0 | 14 | 0 | 34 |
+| Library | 0 | 28 | 0 | 6 | 0 | 34 |
 | LibraryStructure | 6 | 0 | 0 | 2 | 0 | 8 |
 | LiveTv | 0 | 0 | 38 | 0 | 0 | 38 |
 | LiveTvRecordings | 0 | 0 | 0 | 2 | 0 | 2 |
@@ -58,10 +58,10 @@ These SDK conveniences are not counted in the REST parity fraction:
 | MediaInfo | 0 | 5 | 0 | 0 | 0 | 5 |
 | MediaSegment | 0 | 1 | 0 | 0 | 0 | 1 |
 | Movie | 0 | 0 | 0 | 1 | 0 | 1 |
-| MusicGenre | 0 | 0 | 0 | 1 | 0 | 1 |
+| MusicGenre | 0 | 1 | 0 | 0 | 0 | 1 |
 | MusicGenres | 0 | 0 | 0 | 1 | 0 | 1 |
-| Person | 0 | 1 | 0 | 1 | 0 | 2 |
-| Playlist | 0 | 0 | 0 | 11 | 0 | 11 |
+| Person | 0 | 2 | 0 | 0 | 0 | 2 |
+| Playlist | 0 | 11 | 0 | 0 | 0 | 11 |
 | Playstate | 0 | 6 | 0 | 0 | 0 | 6 |
 | Plugin | 0 | 17 | 0 | 0 | 0 | 17 |
 | RemoteImage | 0 | 3 | 0 | 0 | 0 | 3 |
@@ -70,14 +70,14 @@ These SDK conveniences are not counted in the REST parity fraction:
 | Session | 0 | 13 | 0 | 5 | 0 | 18 |
 | Show | 0 | 3 | 0 | 1 | 0 | 4 |
 | Startup | 0 | 7 | 0 | 0 | 0 | 7 |
-| Studio | 0 | 1 | 0 | 1 | 0 | 2 |
-| Subtitle | 0 | 3 | 0 | 7 | 0 | 10 |
+| Studio | 0 | 2 | 0 | 0 | 0 | 2 |
+| Subtitle | 0 | 5 | 0 | 5 | 0 | 10 |
 | Suggestion | 0 | 0 | 0 | 1 | 0 | 1 |
 | SyncPlay | 0 | 0 | 22 | 0 | 0 | 22 |
-| System | 0 | 10 | 0 | 9 | 0 | 19 |
+| System | 0 | 13 | 0 | 6 | 0 | 19 |
 | Trailer | 0 | 0 | 0 | 1 | 0 | 1 |
 | TrickPlay | 0 | 2 | 0 | 0 | 0 | 2 |
-| User | 0 | 15 | 0 | 5 | 0 | 20 |
+| User | 0 | 19 | 0 | 1 | 0 | 20 |
 | UserData | 0 | 5 | 0 | 11 | 0 | 16 |
 | UserView | 0 | 2 | 0 | 0 | 0 | 2 |
 | UserViews | 0 | 2 | 0 | 0 | 0 | 2 |
@@ -91,8 +91,8 @@ These SDK conveniences are not counted in the REST parity fraction:
 
 | Operation | Status | Reason |
 |---|---|---|
-| GetAlbumArtists | deferred | deferred: Artists lookup not implemented |
-| GetArtistByName | deferred | deferred: Artists lookup not implemented |
+| GetAlbumArtists | partial | deferred: Artists lookup not implemented |
+| GetArtistByName | partial | deferred: Artists lookup not implemented |
 | GetArtists | partial | — |
 
 ### Audio
@@ -113,16 +113,16 @@ These SDK conveniences are not counted in the REST parity fraction:
 | AuthenticateUserByName | partial | — |
 | AuthenticateWithQuickConnect | partial | — |
 | AuthorizeQuickConnect | partial | — |
-| CreateKey | deferred | deferred: API key management not implemented |
+| CreateKey | partial | deferred: API key management not implemented |
 | ForgotPassword | deferred | deferred: password reset not implemented |
 | ForgotPasswordPin | deferred | deferred: password reset not implemented |
 | GetAuthProviders | deferred | deferred: auth provider config not implemented |
-| GetKeys | deferred | deferred: API key management not implemented |
+| GetKeys | partial | deferred: API key management not implemented |
 | GetPasswordResetProviders | deferred | deferred: password reset provider config not implemented |
 | GetQuickConnectEnabled | partial | — |
 | GetQuickConnectState | partial | — |
 | InitiateQuickConnect | partial | — |
-| RevokeKey | deferred | deferred: API key management not implemented |
+| RevokeKey | partial | deferred: API key management not implemented |
 
 ### Backup
 
@@ -156,8 +156,8 @@ These SDK conveniences are not counted in the REST parity fraction:
 | Operation | Status | Reason |
 |---|---|---|
 | AddToCollection | partial | — |
-| CreateCollection | deferred | deferred: Collections not implemented |
-| RemoveFromCollection | deferred | deferred: Collections not implemented |
+| CreateCollection | partial | deferred: Collections not implemented |
+| RemoveFromCollection | partial | deferred: Collections not implemented |
 
 ### Device
 
@@ -197,7 +197,7 @@ These SDK conveniences are not counted in the REST parity fraction:
 
 | Operation | Status | Reason |
 |---|---|---|
-| GetGenre | deferred | deferred: Genre lookup not implemented |
+| GetGenre | partial | deferred: Genre lookup not implemented |
 | GetGenres | partial | — |
 
 ### HLS
@@ -224,41 +224,41 @@ These SDK conveniences are not counted in the REST parity fraction:
 | Operation | Status | Reason |
 |---|---|---|
 | DeleteCustomSplashscreen | partial | — |
-| DeleteItemImage | deferred | deferred: item image upload/delete not implemented |
-| DeleteItemImageByIndex | deferred | deferred: item image upload/delete not implemented |
+| DeleteItemImage | partial | deferred: item image upload/delete not implemented |
+| DeleteItemImageByIndex | partial | deferred: item image upload/delete not implemented |
 | DeleteUserImage | deferred | deferred: profile-image write path not implemented; GET/HEAD serve the stock no-image responses |
-| GetArtistImage | deferred | deferred: named-entity image endpoints not implemented |
-| GetGenreImage | deferred | deferred: named-entity image endpoints not implemented |
-| GetGenreImageByIndex | deferred | deferred: named-entity image endpoints not implemented |
+| GetArtistImage | partial | deferred: named-entity image endpoints not implemented |
+| GetGenreImage | partial | deferred: named-entity image endpoints not implemented |
+| GetGenreImageByIndex | partial | deferred: named-entity image endpoints not implemented |
 | GetItemImage | partial | — |
 | GetItemImage2 | partial | — |
 | GetItemImageByIndex | partial | — |
 | GetItemImageInfos | partial | — |
-| GetMusicGenreImage | deferred | deferred: named-entity image endpoints not implemented |
-| GetMusicGenreImageByIndex | deferred | deferred: named-entity image endpoints not implemented |
-| GetPersonImage | deferred | deferred: named-entity image endpoints not implemented |
-| GetPersonImageByIndex | deferred | deferred: named-entity image endpoints not implemented |
+| GetMusicGenreImage | partial | deferred: named-entity image endpoints not implemented |
+| GetMusicGenreImageByIndex | partial | deferred: named-entity image endpoints not implemented |
+| GetPersonImage | partial | deferred: named-entity image endpoints not implemented |
+| GetPersonImageByIndex | partial | deferred: named-entity image endpoints not implemented |
 | GetSplashscreen | partial | — |
-| GetStudioImage | deferred | deferred: named-entity image endpoints not implemented |
-| GetStudioImageByIndex | deferred | deferred: named-entity image endpoints not implemented |
+| GetStudioImage | partial | deferred: named-entity image endpoints not implemented |
+| GetStudioImageByIndex | partial | deferred: named-entity image endpoints not implemented |
 | GetUserImage | partial | — |
-| HeadArtistImage | deferred | deferred: named-entity image endpoints not implemented |
-| HeadGenreImage | deferred | deferred: named-entity image endpoints not implemented |
-| HeadGenreImageByIndex | deferred | deferred: named-entity image endpoints not implemented |
+| HeadArtistImage | partial | deferred: named-entity image endpoints not implemented |
+| HeadGenreImage | partial | deferred: named-entity image endpoints not implemented |
+| HeadGenreImageByIndex | partial | deferred: named-entity image endpoints not implemented |
 | HeadItemImage | partial | — |
 | HeadItemImage2 | partial | — |
 | HeadItemImageByIndex | partial | — |
-| HeadMusicGenreImage | deferred | deferred: named-entity image endpoints not implemented |
-| HeadMusicGenreImageByIndex | deferred | deferred: named-entity image endpoints not implemented |
-| HeadPersonImage | deferred | deferred: named-entity image endpoints not implemented |
-| HeadPersonImageByIndex | deferred | deferred: named-entity image endpoints not implemented |
-| HeadStudioImage | deferred | deferred: named-entity image endpoints not implemented |
-| HeadStudioImageByIndex | deferred | deferred: named-entity image endpoints not implemented |
+| HeadMusicGenreImage | partial | deferred: named-entity image endpoints not implemented |
+| HeadMusicGenreImageByIndex | partial | deferred: named-entity image endpoints not implemented |
+| HeadPersonImage | partial | deferred: named-entity image endpoints not implemented |
+| HeadPersonImageByIndex | partial | deferred: named-entity image endpoints not implemented |
+| HeadStudioImage | partial | deferred: named-entity image endpoints not implemented |
+| HeadStudioImageByIndex | partial | deferred: named-entity image endpoints not implemented |
 | HeadUserImage | partial | — |
 | PostUserImage | deferred | deferred: profile-image write path not implemented; GET/HEAD serve the stock no-image responses |
-| SetItemImage | deferred | deferred: item image upload/delete not implemented |
-| SetItemImageByIndex | deferred | deferred: item image upload/delete not implemented |
-| UpdateItemImageIndex | deferred | deferred: item image upload/delete not implemented |
+| SetItemImage | partial | deferred: item image upload/delete not implemented |
+| SetItemImageByIndex | partial | deferred: item image upload/delete not implemented |
+| UpdateItemImageIndex | partial | deferred: item image upload/delete not implemented |
 | UploadCustomSplashscreen | partial | — |
 
 ### Images
@@ -305,9 +305,9 @@ These SDK conveniences are not counted in the REST parity fraction:
 
 | Operation | Status | Reason |
 |---|---|---|
-| GetMetadataEditorInfo | deferred | deferred: item metadata endpoints not implemented |
-| UpdateItem | deferred | deferred: item write/delete not implemented |
-| UpdateItemContentType | deferred | deferred: item write/delete not implemented |
+| GetMetadataEditorInfo | partial | deferred: item metadata endpoints not implemented |
+| UpdateItem | partial | deferred: item write/delete not implemented |
+| UpdateItemContentType | partial | deferred: item write/delete not implemented |
 
 ### Items
 
@@ -322,8 +322,8 @@ These SDK conveniences are not counted in the REST parity fraction:
 
 | Operation | Status | Reason |
 |---|---|---|
-| DeleteItem | deferred | deferred: item write/delete not implemented |
-| DeleteItems | deferred | deferred: item write/delete not implemented |
+| DeleteItem | partial | deferred: item write/delete not implemented |
+| DeleteItems | partial | deferred: item write/delete not implemented |
 | GetAncestors | partial | — |
 | GetDownload | partial | — |
 | GetFile | deferred | deferred: item metadata endpoints not implemented |
@@ -335,7 +335,7 @@ These SDK conveniences are not counted in the REST parity fraction:
 | GetLatestMedia | partial | — |
 | GetLibraryOptionsInfo | partial | — |
 | GetLocalTrailers | partial | — |
-| GetMediaFolders | deferred | deferred: library media update hooks not implemented |
+| GetMediaFolders | partial | — |
 | GetPhysicalPaths | deferred | deferred: library filesystem endpoints not implemented |
 | GetResumeItems | partial | — |
 | GetRootFolder | deferred | deferred: root folder endpoint not implemented |
@@ -349,11 +349,11 @@ These SDK conveniences are not counted in the REST parity fraction:
 | GetThemeMedia | partial | — |
 | GetThemeSongs | deferred | deferred: item metadata endpoints not implemented |
 | GetThemeVideos | deferred | deferred: item metadata endpoints not implemented |
-| PostAddedMovies | deferred | deferred: library media update hooks not implemented |
-| PostAddedSeries | deferred | deferred: library media update hooks not implemented |
-| PostUpdatedMedia | deferred | deferred: library media update hooks not implemented |
-| PostUpdatedMovies | deferred | deferred: library media update hooks not implemented |
-| PostUpdatedSeries | deferred | deferred: library media update hooks not implemented |
+| PostAddedMovies | partial | deferred: library media update hooks not implemented |
+| PostAddedSeries | partial | deferred: library media update hooks not implemented |
+| PostUpdatedMedia | partial | deferred: library media update hooks not implemented |
+| PostUpdatedMovies | partial | deferred: library media update hooks not implemented |
+| PostUpdatedSeries | partial | deferred: library media update hooks not implemented |
 | RefreshItem | partial | — |
 | RefreshLibrary | partial | — |
 
@@ -460,7 +460,7 @@ These SDK conveniences are not counted in the REST parity fraction:
 
 | Operation | Status | Reason |
 |---|---|---|
-| GetMusicGenre | deferred | deferred: MusicGenres lookup not implemented |
+| GetMusicGenre | partial | deferred: MusicGenres lookup not implemented |
 
 ### MusicGenres
 
@@ -472,24 +472,24 @@ These SDK conveniences are not counted in the REST parity fraction:
 
 | Operation | Status | Reason |
 |---|---|---|
-| GetPerson | deferred | deferred: Persons lookup not implemented |
+| GetPerson | partial | deferred: Persons lookup not implemented |
 | GetPersons | partial | — |
 
 ### Playlist
 
 | Operation | Status | Reason |
 |---|---|---|
-| AddItemToPlaylist | deferred | deferred: Playlists not implemented |
-| CreatePlaylist | deferred | deferred: Playlists not implemented |
-| GetPlaylist | deferred | deferred: Playlists not implemented |
-| GetPlaylistItems | deferred | deferred: Playlists not implemented |
-| GetPlaylistUser | deferred | deferred: Playlists not implemented |
-| GetPlaylistUsers | deferred | deferred: Playlists not implemented |
-| MoveItem | deferred | deferred: Playlists not implemented |
-| RemoveItemFromPlaylist | deferred | deferred: Playlists not implemented |
-| RemoveUserFromPlaylist | deferred | deferred: Playlists not implemented |
-| UpdatePlaylist | deferred | deferred: Playlists not implemented |
-| UpdatePlaylistUser | deferred | deferred: Playlists not implemented |
+| AddItemToPlaylist | partial | deferred: Playlists not implemented |
+| CreatePlaylist | partial | deferred: Playlists not implemented |
+| GetPlaylist | partial | deferred: Playlists not implemented |
+| GetPlaylistItems | partial | deferred: Playlists not implemented |
+| GetPlaylistUser | partial | deferred: Playlists not implemented |
+| GetPlaylistUsers | partial | deferred: Playlists not implemented |
+| MoveItem | partial | deferred: Playlists not implemented |
+| RemoveItemFromPlaylist | partial | deferred: Playlists not implemented |
+| RemoveUserFromPlaylist | partial | deferred: Playlists not implemented |
+| UpdatePlaylist | partial | deferred: Playlists not implemented |
+| UpdatePlaylistUser | partial | deferred: Playlists not implemented |
 
 ### Playstate
 
@@ -596,14 +596,14 @@ These SDK conveniences are not counted in the REST parity fraction:
 
 | Operation | Status | Reason |
 |---|---|---|
-| GetStudio | deferred | deferred: Studios lookup not implemented |
+| GetStudio | partial | deferred: Studios lookup not implemented |
 | GetStudios | partial | — |
 
 ### Subtitle
 
 | Operation | Status | Reason |
 |---|---|---|
-| DeleteSubtitle | deferred | deferred: subtitle upload/delete not implemented |
+| DeleteSubtitle | partial | deferred: subtitle upload/delete not implemented |
 | DownloadRemoteSubtitles | deferred | deferred: remote subtitle search not implemented |
 | GetFallbackFont | deferred | deferred: fallback font delivery not implemented |
 | GetFallbackFontList | deferred | deferred: fallback font delivery not implemented |
@@ -612,7 +612,7 @@ These SDK conveniences are not counted in the REST parity fraction:
 | GetSubtitlePlaylist | partial | — |
 | GetSubtitleWithTicks | partial | — |
 | SearchRemoteSubtitles | deferred | deferred: remote subtitle search not implemented |
-| UploadSubtitle | deferred | deferred: subtitle upload/delete not implemented |
+| UploadSubtitle | partial | deferred: subtitle upload/delete not implemented |
 
 ### Suggestion
 
@@ -667,9 +667,9 @@ These SDK conveniences are not counted in the REST parity fraction:
 | PostPingSystem | partial | — |
 | RestartApplication | deferred | deferred: server restart/shutdown not implemented |
 | ShutdownApplication | deferred | deferred: server restart/shutdown not implemented |
-| UpdateBrandingConfiguration | deferred | deferred: system configuration management not implemented |
-| UpdateConfiguration | deferred | deferred: system configuration management not implemented |
-| UpdateNamedConfiguration | deferred | deferred: system configuration management not implemented |
+| UpdateBrandingConfiguration | partial | deferred: system configuration management not implemented |
+| UpdateConfiguration | partial | deferred: system configuration management not implemented |
+| UpdateNamedConfiguration | partial | deferred: system configuration management not implemented |
 
 ### Trailer
 
@@ -688,8 +688,8 @@ These SDK conveniences are not counted in the REST parity fraction:
 
 | Operation | Status | Reason |
 |---|---|---|
-| CreateUserByName | deferred | deferred: user management not implemented |
-| DeleteUser | deferred | deferred: user management not implemented |
+| CreateUserByName | partial | deferred: user management not implemented |
+| DeleteUser | partial | deferred: user management not implemented |
 | GetCurrentUser | partial | — |
 | GetPublicUsers | partial | — |
 | GetUserById | partial | — |
@@ -702,9 +702,9 @@ These SDK conveniences are not counted in the REST parity fraction:
 | SHADOW:GetRootFolderLegacy | deferred | deferred: user root folder legacy path not implemented |
 | SHADOW:GetSpecialFeaturesLegacy | partial | — |
 | SHADOW:UpdateUserConfigurationLegacy | partial | — |
-| SHADOW:UpdateUserLegacy | deferred | deferred: user management not implemented |
+| SHADOW:UpdateUserLegacy | partial | deferred: user management not implemented |
 | SHADOW:UpdateUserPasswordLegacy | partial | — |
-| UpdateUser | deferred | deferred: user management not implemented |
+| UpdateUser | partial | deferred: user management not implemented |
 | UpdateUserConfiguration | partial | — |
 | UpdateUserPassword | partial | — |
 | UpdateUserPolicy | partial | — |
@@ -777,7 +777,7 @@ These SDK conveniences are not counted in the REST parity fraction:
 ## Shadow coverage
 
 - Total shadow routes: 55
-- Registered: 34
+- Registered: 35
 
 ## Deferred-stubbed cohort
 
@@ -788,7 +788,7 @@ They use `status: stubbed` with `disposition: deferred` per decision D2.
 
 - OpenAPI operations: 364
 - Shadow routes: 55
-- Route snapshot routes: 272
+- Route snapshot routes: 337
 - Native routes (excluded from parity): 2
 - Duplicate operation IDs: 0
 - Unknown exported routes: 0

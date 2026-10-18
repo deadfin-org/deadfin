@@ -235,14 +235,12 @@ operations:
     status: deferred
     reason: "deferred: Lyrics not implemented"
 
-  GetMediaFolders:
-    status: deferred
-    reason: "deferred: library media update hooks not implemented"
-    clients: [swiftfin]
-
   GetMetadataEditorInfo:
     status: deferred
     reason: "deferred: item metadata endpoints not implemented"
+
+  GetMediaFolders:
+    clients: [swiftfin]
 
   GetMovieRecommendations:
     status: deferred

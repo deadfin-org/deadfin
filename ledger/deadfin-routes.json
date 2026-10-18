@@ -1,7 +1,13 @@
 {
   "format": "deadfin-route-snapshot/v1",
-  "revision": "539eb51ad60df4d96a3eab27fa52086d75dafbf2",
+  "revision": "46fd154a9d1aa4ac0ad91ef3b6bb786489de7090",
   "routes": [
+    {
+      "Method": "POST",
+      "Pattern": "/Playlists/{playlistId}/Items",
+      "OperationId": "AddItemToPlaylist",
+      "Policy": "DefaultAuthorization"
+    },
     {
       "Method": "POST",
       "Pattern": "/LiveTv/ListingProviders",
@@ -94,6 +100,24 @@
     },
     {
       "Method": "POST",
+      "Pattern": "/Collections",
+      "OperationId": "CreateCollection",
+      "Policy": "CollectionManagement"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Auth/Keys",
+      "OperationId": "CreateKey",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Playlists",
+      "OperationId": "CreatePlaylist",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
       "Pattern": "/LiveTv/SeriesTimers",
       "OperationId": "CreateSeriesTimer",
       "Policy": "LiveTvManagement"
@@ -105,10 +129,40 @@
       "Policy": "LiveTvManagement"
     },
     {
+      "Method": "POST",
+      "Pattern": "/Users/New",
+      "OperationId": "CreateUserByName",
+      "Policy": "RequiresElevation"
+    },
+    {
       "Method": "DELETE",
       "Pattern": "/Branding/Splashscreen",
       "OperationId": "DeleteCustomSplashscreen",
       "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "DELETE",
+      "Pattern": "/Items/{itemId}",
+      "OperationId": "DeleteItem",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "DELETE",
+      "Pattern": "/Items/{itemId}/Images/{imageType}",
+      "OperationId": "DeleteItemImage",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "DELETE",
+      "Pattern": "/Items/{itemId}/Images/{imageType}/{imageIndex}",
+      "OperationId": "DeleteItemImageByIndex",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "DELETE",
+      "Pattern": "/Items",
+      "OperationId": "DeleteItems",
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "DELETE",
@@ -124,8 +178,20 @@
     },
     {
       "Method": "DELETE",
+      "Pattern": "/Videos/{itemId}/Subtitles/{index}",
+      "OperationId": "DeleteSubtitle",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "DELETE",
       "Pattern": "/LiveTv/TunerHosts",
       "OperationId": "DeleteTunerHost",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "DELETE",
+      "Pattern": "/Users/{userId}",
+      "OperationId": "DeleteUser",
       "Policy": "RequiresElevation"
     },
     {
@@ -172,9 +238,27 @@
     },
     {
       "Method": "GET",
+      "Pattern": "/Artists/AlbumArtists",
+      "OperationId": "GetAlbumArtists",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
       "Pattern": "/Items/{itemId}/Ancestors",
       "OperationId": "GetAncestors",
       "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Artists/{name}",
+      "OperationId": "GetArtistByName",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Artists/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "GetArtistImage",
+      "Anonymous": true
     },
     {
       "Method": "GET",
@@ -184,17 +268,21 @@
     },
     {
       "Method": "GET",
+      "Pattern": "/Videos/{videoId}/{mediaSourceId}/Attachments/{index}",
+      "OperationId": "GetAttachment",
+      "Anonymous": true
+    },
+    {
+      "Method": "GET",
       "Pattern": "/Audio/{itemId}/stream",
       "OperationId": "GetAudioStream",
-      "Policy": "DefaultAuthorization",
-      "PlaySessionCredential": true
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "GET",
       "Pattern": "/Audio/{itemId}/stream.{container}",
       "OperationId": "GetAudioStreamByContainer",
-      "Policy": "DefaultAuthorization",
-      "PlaySessionCredential": true
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "GET",
@@ -360,6 +448,24 @@
     },
     {
       "Method": "GET",
+      "Pattern": "/Genres/{genreName}",
+      "OperationId": "GetGenre",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Genres/{name}/Images/{imageType}",
+      "OperationId": "GetGenreImage",
+      "Anonymous": true
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Genres/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "GetGenreImageByIndex",
+      "Anonymous": true
+    },
+    {
+      "Method": "GET",
       "Pattern": "/Genres",
       "OperationId": "GetGenres",
       "Policy": "DefaultAuthorization"
@@ -432,6 +538,12 @@
     },
     {
       "Method": "GET",
+      "Pattern": "/Auth/Keys",
+      "OperationId": "GetKeys",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "GET",
       "Pattern": "/Items/Latest",
       "OperationId": "GetLatestMedia",
       "Policy": "DefaultAuthorization"
@@ -497,6 +609,18 @@
       "Policy": "RequiresElevation"
     },
     {
+      "Method": "GET",
+      "Pattern": "/Library/MediaFolders",
+      "OperationId": "GetMediaFolders",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Items/{itemId}/MetadataEditor",
+      "OperationId": "GetMetadataEditorInfo",
+      "Policy": "RequiresElevation"
+    },
+    {
       "Method": "POST",
       "Pattern": "/Items/RemoteSearch/Movie",
       "OperationId": "GetMovieRemoteSearchResults",
@@ -513,6 +637,24 @@
       "Pattern": "/Items/RemoteSearch/MusicArtist",
       "OperationId": "GetMusicArtistRemoteSearchResults",
       "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/MusicGenres/{genreName}",
+      "OperationId": "GetMusicGenre",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/MusicGenres/{name}/Images/{imageType}",
+      "OperationId": "GetMusicGenreImage",
+      "Anonymous": true
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/MusicGenres/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "GetMusicGenreImageByIndex",
+      "Anonymous": true
     },
     {
       "Method": "POST",
@@ -557,6 +699,24 @@
       "Policy": "FirstTimeSetupOrDefault"
     },
     {
+      "Method": "GET",
+      "Pattern": "/Persons/{name}",
+      "OperationId": "GetPerson",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Persons/{name}/Images/{imageType}",
+      "OperationId": "GetPersonImage",
+      "Anonymous": true
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Persons/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "GetPersonImageByIndex",
+      "Anonymous": true
+    },
+    {
       "Method": "POST",
       "Pattern": "/Items/RemoteSearch/Person",
       "OperationId": "GetPersonRemoteSearchResults",
@@ -578,6 +738,30 @@
       "Method": "GET",
       "Pattern": "/Items/{itemId}/PlaybackInfo",
       "OperationId": "GetPlaybackInfo",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Playlists/{playlistId}",
+      "OperationId": "GetPlaylist",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Playlists/{playlistId}/Items",
+      "OperationId": "GetPlaylistItems",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Playlists/{playlistId}/Users/{userId}",
+      "OperationId": "GetPlaylistUser",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Playlists/{playlistId}/Users",
+      "OperationId": "GetPlaylistUsers",
       "Policy": "DefaultAuthorization"
     },
     {
@@ -804,6 +988,24 @@
     },
     {
       "Method": "GET",
+      "Pattern": "/Studios/{name}",
+      "OperationId": "GetStudio",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Studios/{name}/Images/{imageType}",
+      "OperationId": "GetStudioImage",
+      "Anonymous": true
+    },
+    {
+      "Method": "GET",
+      "Pattern": "/Studios/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "GetStudioImageByIndex",
+      "Anonymous": true
+    },
+    {
+      "Method": "GET",
       "Pattern": "/Studios",
       "OperationId": "GetStudios",
       "Policy": "DefaultAuthorization"
@@ -825,13 +1027,6 @@
       "Pattern": "/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/{routeStartPositionTicks}/Stream.{routeFormat}",
       "OperationId": "GetSubtitleWithTicks",
       "Policy": "DefaultAuthorization"
-    },
-    {
-      "Method": "GET",
-      "Pattern": "/Videos/{videoId}/{mediaSourceId}/Attachments/{index}",
-      "OperationId": "GetAttachment",
-      "Anonymous": true,
-      "OptionalIdentity": true
     },
     {
       "Method": "GET",
@@ -933,15 +1128,13 @@
       "Method": "GET",
       "Pattern": "/Videos/{itemId}/stream",
       "OperationId": "GetVideoStream",
-      "Policy": "DefaultAuthorization",
-      "PlaySessionCredential": true
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "GET",
       "Pattern": "/Videos/{itemId}/stream.{container}",
       "OperationId": "GetVideoStreamByContainer",
-      "Policy": "DefaultAuthorization",
-      "PlaySessionCredential": true
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "GET",
@@ -951,17 +1144,33 @@
     },
     {
       "Method": "HEAD",
+      "Pattern": "/Artists/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "HeadArtistImage",
+      "Anonymous": true
+    },
+    {
+      "Method": "HEAD",
       "Pattern": "/Audio/{itemId}/stream",
       "OperationId": "HeadAudioStream",
-      "Policy": "DefaultAuthorization",
-      "PlaySessionCredential": true
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "HEAD",
       "Pattern": "/Audio/{itemId}/stream.{container}",
       "OperationId": "HeadAudioStreamByContainer",
-      "Policy": "DefaultAuthorization",
-      "PlaySessionCredential": true
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "HEAD",
+      "Pattern": "/Genres/{name}/Images/{imageType}",
+      "OperationId": "HeadGenreImage",
+      "Anonymous": true
+    },
+    {
+      "Method": "HEAD",
+      "Pattern": "/Genres/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "HeadGenreImageByIndex",
+      "Anonymous": true
     },
     {
       "Method": "HEAD",
@@ -983,6 +1192,42 @@
     },
     {
       "Method": "HEAD",
+      "Pattern": "/MusicGenres/{name}/Images/{imageType}",
+      "OperationId": "HeadMusicGenreImage",
+      "Anonymous": true
+    },
+    {
+      "Method": "HEAD",
+      "Pattern": "/MusicGenres/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "HeadMusicGenreImageByIndex",
+      "Anonymous": true
+    },
+    {
+      "Method": "HEAD",
+      "Pattern": "/Persons/{name}/Images/{imageType}",
+      "OperationId": "HeadPersonImage",
+      "Anonymous": true
+    },
+    {
+      "Method": "HEAD",
+      "Pattern": "/Persons/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "HeadPersonImageByIndex",
+      "Anonymous": true
+    },
+    {
+      "Method": "HEAD",
+      "Pattern": "/Studios/{name}/Images/{imageType}",
+      "OperationId": "HeadStudioImage",
+      "Anonymous": true
+    },
+    {
+      "Method": "HEAD",
+      "Pattern": "/Studios/{name}/Images/{imageType}/{imageIndex}",
+      "OperationId": "HeadStudioImageByIndex",
+      "Anonymous": true
+    },
+    {
+      "Method": "HEAD",
       "Pattern": "/Audio/{itemId}/universal",
       "OperationId": "HeadUniversalAudioStream",
       "Policy": "DefaultAuthorization"
@@ -997,15 +1242,13 @@
       "Method": "HEAD",
       "Pattern": "/Videos/{itemId}/stream",
       "OperationId": "HeadVideoStream",
-      "Policy": "DefaultAuthorization",
-      "PlaySessionCredential": true
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "HEAD",
       "Pattern": "/Videos/{itemId}/stream.{container}",
       "OperationId": "HeadVideoStreamByContainer",
-      "Policy": "DefaultAuthorization",
-      "PlaySessionCredential": true
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "POST",
@@ -1050,6 +1293,12 @@
       "Policy": "DefaultAuthorization"
     },
     {
+      "Method": "POST",
+      "Pattern": "/Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}",
+      "OperationId": "MoveItem",
+      "Policy": "DefaultAuthorization"
+    },
+    {
       "Method": "GET",
       "Pattern": "/deadfin/v1/build",
       "OperationId": "NATIVE:GetBuild",
@@ -1087,6 +1336,18 @@
     },
     {
       "Method": "POST",
+      "Pattern": "/Library/Movies/Added",
+      "OperationId": "PostAddedMovies",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Library/Series/Added",
+      "OperationId": "PostAddedSeries",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
       "Pattern": "/Sessions/Capabilities",
       "OperationId": "PostCapabilities",
       "Policy": "DefaultAuthorization"
@@ -1105,6 +1366,24 @@
     },
     {
       "Method": "POST",
+      "Pattern": "/Library/Media/Updated",
+      "OperationId": "PostUpdatedMedia",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Library/Movies/Updated",
+      "OperationId": "PostUpdatedMovies",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Library/Series/Updated",
+      "OperationId": "PostUpdatedSeries",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
       "Pattern": "/Items/{itemId}/Refresh",
       "OperationId": "RefreshItem",
       "Policy": "RequiresElevation"
@@ -1117,9 +1396,27 @@
     },
     {
       "Method": "DELETE",
+      "Pattern": "/Collections/{collectionId}/Items",
+      "OperationId": "RemoveFromCollection",
+      "Policy": "CollectionManagement"
+    },
+    {
+      "Method": "DELETE",
+      "Pattern": "/Playlists/{playlistId}/Items",
+      "OperationId": "RemoveItemFromPlaylist",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "DELETE",
       "Pattern": "/Library/VirtualFolders/Paths",
       "OperationId": "RemoveMediaPath",
       "Policy": "FirstTimeSetupOrElevated"
+    },
+    {
+      "Method": "DELETE",
+      "Pattern": "/Playlists/{playlistId}/Users/{userId}",
+      "OperationId": "RemoveUserFromPlaylist",
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "DELETE",
@@ -1155,6 +1452,12 @@
       "Method": "POST",
       "Pattern": "/LiveTv/Tuners/{tunerId}/Reset",
       "OperationId": "ResetTuner",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "DELETE",
+      "Pattern": "/Auth/Keys/{key}",
+      "OperationId": "RevokeKey",
       "Policy": "RequiresElevation"
     },
     {
@@ -1351,6 +1654,12 @@
     },
     {
       "Method": "POST",
+      "Pattern": "/Users/{userId}",
+      "OperationId": "SHADOW:UpdateUserLegacy",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
       "Pattern": "/Users/{userId}/Password",
       "OperationId": "SHADOW:UpdateUserPasswordLegacy",
       "Policy": "DefaultAuthorization"
@@ -1377,6 +1686,18 @@
       "Method": "POST",
       "Pattern": "/LiveTv/ChannelMappings",
       "OperationId": "SetChannelMapping",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Items/{itemId}/Images/{imageType}",
+      "OperationId": "SetItemImage",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Items/{itemId}/Images/{imageType}/{imageIndex}",
+      "OperationId": "SetItemImageByIndex",
       "Policy": "RequiresElevation"
     },
     {
@@ -1561,6 +1882,18 @@
     },
     {
       "Method": "POST",
+      "Pattern": "/System/Configuration/Branding",
+      "OperationId": "UpdateBrandingConfiguration",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/System/Configuration",
+      "OperationId": "UpdateConfiguration",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
       "Pattern": "/DisplayPreferences/{displayPreferencesId}",
       "OperationId": "UpdateDisplayPreferences",
       "Policy": "DefaultAuthorization"
@@ -1573,6 +1906,24 @@
     },
     {
       "Method": "POST",
+      "Pattern": "/Items/{itemId}",
+      "OperationId": "UpdateItem",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Items/{itemId}/ContentType",
+      "OperationId": "UpdateItemContentType",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Items/{itemId}/Images/{imageType}/{imageIndex}/Index",
+      "OperationId": "UpdateItemImageIndex",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
       "Pattern": "/UserItems/{itemId}/UserData",
       "OperationId": "UpdateItemUserData",
       "Policy": "DefaultAuthorization"
@@ -1582,6 +1933,24 @@
       "Pattern": "/Library/VirtualFolders/LibraryOptions",
       "OperationId": "UpdateLibraryOptions",
       "Policy": "FirstTimeSetupOrElevated"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/System/Configuration/{key}",
+      "OperationId": "UpdateNamedConfiguration",
+      "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Playlists/{playlistId}",
+      "OperationId": "UpdatePlaylist",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Playlists/{playlistId}/Users/{userId}",
+      "OperationId": "UpdatePlaylistUser",
+      "Policy": "DefaultAuthorization"
     },
     {
       "Method": "POST",
@@ -1615,6 +1984,12 @@
     },
     {
       "Method": "POST",
+      "Pattern": "/Users",
+      "OperationId": "UpdateUser",
+      "Policy": "DefaultAuthorization"
+    },
+    {
+      "Method": "POST",
       "Pattern": "/Users/Configuration",
       "OperationId": "UpdateUserConfiguration",
       "Policy": "DefaultAuthorization"
@@ -1636,6 +2011,12 @@
       "Pattern": "/Branding/Splashscreen",
       "OperationId": "UploadCustomSplashscreen",
       "Policy": "RequiresElevation"
+    },
+    {
+      "Method": "POST",
+      "Pattern": "/Videos/{itemId}/Subtitles",
+      "OperationId": "UploadSubtitle",
+      "Policy": "SubtitleManagement"
     },
     {
       "Method": "POST",

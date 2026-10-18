@@ -288,7 +288,7 @@ func projectCore(value item.Item, enrichment Enrichment, options store.ItemQuery
 		OfficialRating: dereference(value.OfficialRating),
 		ProductionYear: value.ProductionYear, RunTimeTicks: value.RunTimeTicks,
 		IndexNumber: value.IndexNumber, ParentIndexNumber: value.ParentIndexNumber,
-		ChannelID: value.ChannelID, Type: dto.Kind(value.Kind.String()),
+		ChannelID: value.ChannelID, Type: dtoItemKind(value.Kind),
 		OriginalLanguage: dereference(value.OriginalLanguage), ImageBlurHashes: make(map[string]map[string]string),
 	}
 	if value.PremiereDate != nil {
@@ -410,6 +410,11 @@ func projectCore(value item.Item, enrichment Enrichment, options store.ItemQuery
 	if value.Extra.Video != nil {
 		result.AspectRatio = dereference(value.Extra.Video.AspectRatio)
 	}
+	// PlaylistsFolder overrides CollectionType with playlists.
+	if value.Kind == item.KindPlaylistsFolder {
+		collectionType := dto.CollectionType(item.CollectionTypePlaylists.String())
+		result.CollectionType = &collectionType
+	}
 	// A mixed library has upstream's null CollectionType.
 	if value.Extra.CollectionFolder != nil && value.Extra.CollectionFolder.CollectionType != nil && *value.Extra.CollectionFolder.CollectionType != item.CollectionTypeUnknown {
 		collectionType := dto.CollectionType(value.Extra.CollectionFolder.CollectionType.String())
@@ -526,6 +531,15 @@ func itemHasMediaSources(value item.Item) bool {
 }
 
 func boolPointer(value bool) *bool { return &value }
+
+// dtoItemKind is BaseItem.GetBaseItemKind: the BaseItemKind named by
+// GetClientTypeName, which PlaylistsFolder overrides as ManualPlaylistsFolder.
+func dtoItemKind(kind item.Kind) dto.Kind {
+	if kind == item.KindPlaylistsFolder {
+		return dto.Kind(item.KindManualPlaylistsFolder.String())
+	}
+	return dto.Kind(kind.String())
+}
 
 func primaryImageAspectRatio(images []item.ImageInfo) *float64 {
 	for _, image := range images {

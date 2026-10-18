@@ -136,10 +136,6 @@
     "reason": "deferred: Lyrics not implemented"
   },
   {
-    "operationId": "GetMediaFolders",
-    "reason": "deferred: library media update hooks not implemented"
-  },
-  {
     "operationId": "GetMovieRecommendations",
     "reason": "deferred: movie recommendations not implemented"
   },

@@ -2068,6 +2068,7 @@ func registerRoutes(rt *router.Router, services routeServices) {
 	handlers.RegisterConfiguration(rt, services.manager)
 	handlers.RegisterLocalization(rt, services.localization, services.manager)
 	handlers.RegisterLibrary(rt, services.refresh, services.topology)
+	handlers.RegisterMediaFolders(rt, services.topology, services.items, services.itemBuilder)
 	handlers.RegisterLibraryOptionsInfo(rt, services.metadataPlugins, func() []config.MetadataOptions {
 		if services.manager == nil {
 			return nil

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/deadfin-org/deadfin/internal/api/router"
 	"github.com/deadfin-org/deadfin/internal/auth"
 	"github.com/deadfin-org/deadfin/internal/dto"
+	"github.com/deadfin-org/deadfin/internal/item"
 	"github.com/deadfin-org/deadfin/internal/library"
 	"github.com/deadfin-org/deadfin/internal/store"
 )
@@ -519,4 +521,101 @@ func writeLibraryTopologyError(w http.ResponseWriter, err error) {
 		status = http.StatusServiceUnavailable
 	}
 	http.Error(w, http.StatusText(status), status)
+}
+
+// mediaFolderItems reads the library roots of GET /Library/MediaFolders.
+type mediaFolderItems interface {
+	Query(context.Context, store.ItemQuery) (store.ItemQueryResult, error)
+}
+
+// RegisterMediaFolders registers GET /Library/MediaFolders
+// (LibraryController.GetMediaFolders, RequiresElevation).
+func RegisterMediaFolders(rt *router.Router, topology libraryTopology, items mediaFolderItems, build ItemDTOBuilder) {
+	h := mediaFoldersHandler{topology: topology, items: items, build: build}
+	rt.Handle(http.MethodGet, "/Library/MediaFolders", router.Route{
+		OperationID: "GetMediaFolders",
+		Policy:      string(auth.PolicyRequiresElevation),
+	}, h.get)
+}
+
+type mediaFoldersHandler struct {
+	topology libraryTopology
+	items    mediaFolderItems
+	build    ItemDTOBuilder
+}
+
+// get ports GetMediaFolders: the user root's collection folders and the root
+// folder's virtual children (the playlists folder), with enabled library
+// options, ordered by SortName, filtered by isHidden, projected with default
+// DtoOptions and no user.
+func (h mediaFoldersHandler) get(w http.ResponseWriter, r *http.Request) {
+	if h.topology == nil || h.items == nil || h.build == nil {
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		return
+	}
+	var query struct {
+		IsHidden *bool `query:"isHidden"`
+	}
+	if err := bind.QueryRequest(r, &query); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	folders, err := h.topology.VirtualFolders(r.Context())
+	if err != nil {
+		internalError(w)
+		return
+	}
+	disabled := make(map[dto.UUID]bool, len(folders))
+	for _, folder := range folders {
+		if !folder.Options.Enabled {
+			disabled[folder.CollectionFolderID] = true
+		}
+	}
+	result, err := h.items.Query(r.Context(), store.ItemQuery{
+		IncludeItemTypes: []item.Kind{item.KindCollectionFolder, item.KindPlaylistsFolder},
+	})
+	if err != nil {
+		internalError(w)
+		return
+	}
+	values := make([]item.Item, 0, len(result.Items))
+	for _, value := range result.Items {
+		if disabled[value.ID] {
+			continue
+		}
+		// BaseItem.IsHidden is false; only PlaylistsFolder overrides it.
+		hidden := value.Kind == item.KindPlaylistsFolder
+		if query.IsHidden != nil && hidden != *query.IsHidden {
+			continue
+		}
+		values = append(values, value)
+	}
+	sort.SliceStable(values, func(i, j int) bool {
+		left, right := strings.ToLower(mediaFolderSortName(values[i])), strings.ToLower(mediaFolderSortName(values[j]))
+		if left != right {
+			return left < right
+		}
+		return values[i].ID.String() < values[j].ID.String()
+	})
+	options := bind.DefaultItemQueryDTOOptions()
+	options.EnableUserData = false
+	page, err := h.build.BuildDetailed(r.Context(), values, options, nil)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	page.StartIndex = 0
+	page.TotalRecordCount = len(page.Items)
+	_ = render.JSON(w, r, http.StatusOK, page)
+}
+
+// mediaFolderSortName is BaseItem.SortName: ForcedSortName, else the stored
+// sort name, else the name.
+func mediaFolderSortName(value item.Item) string {
+	for _, name := range []*string{value.ForcedSortName, value.SortName, value.Name} {
+		if name != nil && *name != "" {
+			return *name
+		}
+	}
+	return ""
 }
