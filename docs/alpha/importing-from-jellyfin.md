@@ -82,6 +82,10 @@ stock Jellyfin Docker install with its config at `./jellyfin/config`.
 7. **Check.** Sign in with a client that was signed in to Jellyfin. Check
    Continue Watching, Next Up, favorites and a playlist.
 
+8. **Connect your other tools.** Sonarr, Radarr, Seerr and Bazarr: see
+   [integrations.md](integrations.md). Seerr needs its user IDs changed to
+   the Deadfin IDs.
+
 ## If something is missing
 
 - Items not matched: the command prints the watch-state rows matched (by key

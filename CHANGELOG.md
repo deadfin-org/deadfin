@@ -49,6 +49,10 @@ v0.3.0 is the first public alpha of Deadfin.
   People" scheduled task fetches it for every person not yet refreshed
   (D-74). Cast and crew keep their TMDb person ID. This needs a TMDb API
   key (D-11).
+- The integrations guide: connect Seerr, Sonarr, Radarr and Bazarr beside
+  Jellyfin and after the cutover, with a script that moves Seerr users to
+  their Deadfin IDs. See
+  [docs/alpha/integrations.md](docs/alpha/integrations.md).
 
 ### Changed
 

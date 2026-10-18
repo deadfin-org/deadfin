@@ -12,6 +12,8 @@ candidate), or a pinned tag such as `:v0.3.0-rc.6`. Report bugs at
   Kubernetes, NAS, and native Linux deployment patterns.
 - [importing-from-jellyfin.md](importing-from-jellyfin.md): bring users,
   watch state, playlists and libraries from Jellyfin.
+- [integrations.md](integrations.md): connect Seerr, Sonarr, Radarr and
+  Bazarr, beside Jellyfin and after the cutover.
 - [known-differences.md](known-differences.md): what is different from
   Jellyfin, and the open gaps.
 - [reporting-bugs.md](reporting-bugs.md): what to send when something fails.
