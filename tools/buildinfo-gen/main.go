@@ -297,13 +297,20 @@ func discover(ctx context.Context, root string) (buildinfo.Identity, error) {
 	} else if tag, err := git(ctx, root, "describe", "--tags", "--exact-match", "HEAD"); err == nil {
 		ref = "refs/tags/" + strings.TrimSpace(tag)
 	}
-	id.Channel, id.Version = classifyRef(ref, head)
+	var committed time.Time
+	if ct, err := git(ctx, root, "show", "-s", "--format=%ct", "HEAD"); err == nil {
+		if sec, err := strconv.ParseInt(strings.TrimSpace(ct), 10, 64); err == nil {
+			committed = time.Unix(sec, 0)
+		}
+	}
+	id.Channel, id.Version = classifyRef(ref, head, committed)
 	return id, nil
 }
 
 // classifyRef is the ref-to-channel table of docs/09 §4.1, identical to the
-// case statement in tools/image-publication.
-func classifyRef(ref, sha string) (channel, version string) {
+// case statement in tools/image-publication. A release-line ref needs the
+// commit time; without it the build is local.
+func classifyRef(ref, sha string, committed time.Time) (channel, version string) {
 	sha12 := sha[:12]
 	switch {
 	case ref == "master" || ref == "refs/heads/master":
@@ -312,6 +319,11 @@ func classifyRef(ref, sha string) (channel, version string) {
 		train := strings.TrimPrefix(strings.TrimPrefix(ref, "refs/heads/"), "train/")
 		if isSemver(train) {
 			return buildinfo.ChannelTrain, train + "-dev-" + sha12
+		}
+	case strings.HasPrefix(ref, "v") || strings.HasPrefix(ref, "refs/heads/v"):
+		line := strings.TrimPrefix(strings.TrimPrefix(ref, "refs/heads/"), "v")
+		if isSemver(line+".0") && !strings.HasPrefix(line, "v") && !committed.IsZero() {
+			return buildinfo.ChannelDev, line + ".0-dev." + committed.UTC().Format("20060102150405") + "-" + sha12
 		}
 	case strings.HasPrefix(ref, "refs/tags/"):
 		tag := strings.TrimPrefix(ref, "refs/tags/")

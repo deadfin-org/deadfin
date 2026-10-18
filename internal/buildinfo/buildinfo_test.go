@@ -73,6 +73,17 @@ func TestValidateRules(t *testing.T) {
 		{"rule 6 reject shape", func(id *buildinfo.Identity) { id.Channel = "train"; id.Version = "v0.2.3" }, "rule 6"},
 		{"rule 7 accept", func(id *buildinfo.Identity) { id.Channel = "master"; id.Version = "dev-" + sha12 }, ""},
 		{"rule 7 reject", func(id *buildinfo.Identity) { id.Channel = "master"; id.Version = "dev-" + wrong1 }, "rule 7"},
+		{"rule 14 accept", func(id *buildinfo.Identity) { id.Channel = "dev"; id.Version = "0.4.0-dev.20261018071500-" + sha12 }, ""},
+		{"rule 14 accept dirty", func(id *buildinfo.Identity) {
+			id.Channel = "dev"
+			id.Version = "0.4.0-dev.20261018071500-" + sha12
+			id.Dirty = true
+		}, ""},
+		{"rule 14 reject prefix", func(id *buildinfo.Identity) { id.Channel = "dev"; id.Version = "0.4.0-dev.20261018071500-" + wrong1 }, "rule 14"},
+		{"rule 14 reject patch", func(id *buildinfo.Identity) { id.Channel = "dev"; id.Version = "0.4.1-dev.20261018071500-" + sha12 }, "rule 14"},
+		{"rule 14 reject v", func(id *buildinfo.Identity) { id.Channel = "dev"; id.Version = "v0.4.0-dev.20261018071500-" + sha12 }, "rule 14"},
+		{"rule 14 reject stamp", func(id *buildinfo.Identity) { id.Channel = "dev"; id.Version = "0.4.0-dev.2026101807150-" + sha12 }, "rule 14"},
+		{"rule 14 reject train shape", func(id *buildinfo.Identity) { id.Channel = "dev"; id.Version = "0.4.0-dev-" + sha12 }, "rule 14"},
 		{"rule 8 accept", func(id *buildinfo.Identity) { id.Channel = "local"; id.Version = "0.0.0-local" }, ""},
 		{"rule 8 reject", func(id *buildinfo.Identity) { id.Channel = "local"; id.Version = "v1.2.3" }, "rule 8"},
 		{"rule 13 accept", func(id *buildinfo.Identity) { id.Channel = "rc"; id.Version = "0.3.0-rc.1" }, ""},

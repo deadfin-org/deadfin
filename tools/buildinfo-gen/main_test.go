@@ -384,7 +384,8 @@ func TestWrongModuleRejected(t *testing.T) {
 }
 
 // TestDiscoverMatchesImagePublication proves the Go ref table equals the
-// shell mapping in tools/image-publication for master, train, and tag refs.
+// shell mapping in tools/image-publication for master, train, release-line,
+// and tag refs.
 func TestDiscoverMatchesImagePublication(t *testing.T) {
 	script, err := filepath.Abs(filepath.Join("..", "image-publication"))
 	if err != nil {
@@ -413,6 +414,8 @@ func TestDiscoverMatchesImagePublication(t *testing.T) {
 	for _, tc := range []struct{ branch, ref string }{
 		{"master", "master"},
 		{"train/v0.2.3", "train/v0.2.3"},
+		{"v0.4", "v0.4"},
+		{"v0.4", "refs/heads/v0.4"},
 		{"master", "refs/tags/v0.2.3"},
 		{"master", "refs/tags/v0.3.0-rc.1"},
 		{"master", "refs/tags/0.3.0-rc.12"},

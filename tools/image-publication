@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Resolve one immutable build identity. Release authority is the train tag.
+# A release-line branch vX.Y publishes channel dev under the sortable tag
+# X.Y.0-dev.<commit time, UTC yyyymmddHHMMSS>-<sha12>.
 set -euo pipefail
 ref=${1:?ref required}
 sha=$(git rev-parse HEAD)
@@ -12,6 +14,11 @@ case "$ref" in
     source_branch=${ref#refs/heads/}; train=${source_branch#train/}
     [[ $train =~ $semver ]] || { echo 'train must name a finite X.Y.Z release' >&2; exit 1; }
     publication_tag="train-${train}-${sha}"; version="${train}-dev-${sha:0:12}"; channel=train ;;
+  v[0-9]*|refs/heads/v[0-9]*)
+    source_branch=${ref#refs/heads/}; line=${source_branch#v}
+    [[ $line =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo 'release line must name a vX.Y branch' >&2; exit 1; }
+    stamp=$(TZ=UTC git show -s --date=format-local:%Y%m%d%H%M%S --format=%cd "$sha")
+    version="${line}.0-dev.${stamp}-${sha:0:12}"; publication_tag=$version; channel=dev ;;
   refs/tags/*)
     tag=${ref#refs/tags/}
     if [[ $tag =~ $semver ]]; then

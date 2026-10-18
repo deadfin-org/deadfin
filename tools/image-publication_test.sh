@@ -5,7 +5,8 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 git init -q -b master
-git -c user.name=test -c user.email=test@example.invalid commit -qm base --allow-empty
+GIT_COMMITTER_DATE='2026-10-18T07:15:00+02:00' \
+  git -c user.name=test -c user.email=test@example.invalid commit -qm base --allow-empty
 sha=$(git rev-parse HEAD)
 git update-ref refs/remotes/origin/master "$sha"
 git tag 0.2.0
@@ -19,6 +20,15 @@ test "$("$helper" train/v0.2.3 | sed -n 's/^publication_tag=//p')" = "train-v0.2
 test "$("$helper" train/v0.2.3 | sed -n 's/^version=//p')" = "v0.2.3-dev-$(printf '%s' "$sha" | cut -c1-12)"
 test "$("$helper" train/v0.2.3 | sed -n 's/^channel=//p')" = train
 test "$("$helper" train/v0.2.3 | tail -n 1)" = "channel=train"
+# Release-line branches publish channel dev under a UTC commit-time tag.
+dev="0.4.0-dev.20261018051500-$(printf '%s' "$sha" | cut -c1-12)"
+for ref in v0.4 refs/heads/v0.4; do
+  test "$("$helper" "$ref" | sed -n 's/^publication_tag=//p')" = "$dev"
+  test "$("$helper" "$ref" | sed -n 's/^version=//p')" = "$dev"
+  test "$("$helper" "$ref" | sed -n 's/^channel=//p')" = dev
+  test "$("$helper" "$ref" | sed -n 's/^source_branch=//p')" = v0.4
+done
+test "$("$helper" v10.12 | sed -n 's/^version=//p')" = "10.12.0-dev.20261018051500-$(printf '%s' "$sha" | cut -c1-12)"
 for tag in 0.2.0 v0.2.1; do
   test "$("$helper" "refs/tags/$tag" | sed -n 's/^version=//p')" = "$tag"
   test "$("$helper" "refs/tags/$tag" | sed -n 's/^channel=//p')" = release
@@ -30,7 +40,7 @@ test "$("$helper" refs/tags/v0.3.0-rc.1 | sed -n 's/^source_branch=//p')" = refs
 test "$("$helper" refs/tags/0.3.0-rc.12 | sed -n 's/^publication_tag=//p')" = 0.3.0-rc.12
 test "$("$helper" refs/tags/0.3.0-rc.12 | sed -n 's/^version=//p')" = 0.3.0-rc.12
 test "$("$helper" refs/tags/0.3.0-rc.12 | sed -n 's/^channel=//p')" = rc
-for ref in feature/x train/0.2 train/0.3.0-rc.1 refs/tags/v0.02.0 refs/tags/v0.3.0-rc. refs/tags/v0.3.0-RC.3; do
+for ref in feature/x train/0.2 train/0.3.0-rc.1 v0.4.0 v0.04 v1 v0.4-x vX.Y refs/heads/v0.4.1 refs/tags/v0.02.0 refs/tags/v0.3.0-rc. refs/tags/v0.3.0-RC.3; do
   if "$helper" "$ref" >/dev/null 2>&1; then echo "accepted invalid $ref" >&2; exit 1; fi
 done
 # Real tags on the master commit: only the tag-shape rule can reject them.

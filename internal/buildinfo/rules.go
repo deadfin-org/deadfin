@@ -38,6 +38,7 @@ const (
 	ChannelRC      = "rc"
 	ChannelTrain   = "train"
 	ChannelMaster  = "master"
+	ChannelDev     = "dev"
 	ChannelLocal   = "local"
 
 	// LocalVersion is the only version a local channel may carry.
@@ -99,6 +100,17 @@ func isTrainVersion(s string) bool {
 	return ok && isVersionCore(core)
 }
 
+// isDevVersion matches ^\d+\.\d+\.0-dev\.\d{14}-[0-9a-f]{12}$ (rule 14):
+// the release line, a UTC commit timestamp, and the commit prefix.
+func isDevVersion(s string) bool {
+	core, rest, ok := strings.Cut(s, "-dev.")
+	if !ok || strings.HasPrefix(core, "v") || !isVersionCore(core) || !strings.HasSuffix(core, ".0") {
+		return false
+	}
+	stamp, sha12, ok := strings.Cut(rest, "-")
+	return ok && len(stamp) == 14 && isDigits(stamp) && len(sha12) == 12 && isHex(sha12)
+}
+
 // isMasterVersion matches ^dev-[0-9a-f]{12}$ (rule 7).
 func isMasterVersion(s string) bool {
 	core, ok := devSuffix("-" + s)
@@ -113,9 +125,9 @@ func Validate(id Identity) error {
 		return fmt.Errorf("component %q is not %q", id.Component, Component)
 	}
 	switch id.Channel {
-	case ChannelRelease, ChannelRC, ChannelTrain, ChannelMaster, ChannelLocal:
+	case ChannelRelease, ChannelRC, ChannelTrain, ChannelMaster, ChannelDev, ChannelLocal:
 	default:
-		return fmt.Errorf("rule 1: channel %q is not one of release, rc, train, master, local", id.Channel)
+		return fmt.Errorf("rule 1: channel %q is not one of release, rc, train, master, dev, local", id.Channel)
 	}
 	if id.Revision != UnknownRevision && !IsRevision(id.Revision) {
 		return fmt.Errorf("rule 2: revision %q is neither unknown nor 40 lowercase hex characters", id.Revision)
@@ -142,6 +154,10 @@ func Validate(id Identity) error {
 	case ChannelMaster:
 		if !isMasterVersion(id.Version) || !strings.HasPrefix(id.Revision, id.Version[len(id.Version)-12:]) {
 			return fmt.Errorf("rule 7: master version %q does not match ^dev-<sha12>$ with the suffix a prefix of revision %q", id.Version, id.Revision)
+		}
+	case ChannelDev:
+		if !isDevVersion(id.Version) || !strings.HasPrefix(id.Revision, id.Version[len(id.Version)-12:]) {
+			return fmt.Errorf("rule 14: dev version %q does not match ^X.Y.0-dev.<yyyymmddHHMMSS>-<sha12>$ with the suffix a prefix of revision %q", id.Version, id.Revision)
 		}
 	case ChannelLocal:
 		if id.Version != LocalVersion {
