@@ -79,6 +79,11 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- `import-jellyfin` reads a Jellyfin database in WAL mode from the read-only
+  `/import` mount that the import guide uses. The importer opens the stopped
+  copy immutable, so SQLite creates no `jellyfin.db-shm` next to it. A
+  non-empty `jellyfin.db-wal` stops the import with a message to stop
+  Jellyfin and copy again (#697).
 - HLS plays an audio track that starts late. A track whose first packet is
   more than 1 s into the file is encoded with leading silence instead of
   copied: AAC when the client accepts it, else AC3 or E-AC3. A copied late

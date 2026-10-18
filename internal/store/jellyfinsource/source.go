@@ -11,6 +11,8 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -26,9 +28,17 @@ var PlaceholderItemID = dto.UUID{15: 1}
 // Source is an open, read-only Jellyfin database.
 type Source struct{ db *sql.DB }
 
-// Open opens path read-only.
+// Open opens path read-only. The import guide requires a copy made while
+// Jellyfin is stopped, so the file does not change during the import. Open
+// therefore opens it immutable: SQLite then creates no -shm or -wal file,
+// and a Jellyfin database in WAL mode opens from a read-only directory
+// (deadfin#697). A non-empty -wal file holds committed changes that an
+// immutable open would not see, so Open refuses it.
 func Open(ctx context.Context, path string) (*Source, error) {
-	db, err := sql.Open("sqlite", "file:"+url.PathEscape(path)+"?mode=ro&_pragma=query_only(1)")
+	if info, err := os.Stat(path + "-wal"); err == nil && info.Size() > 0 {
+		return nil, fmt.Errorf("jellyfinsource: open %s: %s-wal is not empty; stop Jellyfin and copy the database again", path, filepath.Base(path))
+	}
+	db, err := sql.Open("sqlite", "file:"+url.PathEscape(path)+"?mode=ro&immutable=1&_pragma=query_only(1)")
 	if err != nil {
 		return nil, fmt.Errorf("jellyfinsource: open %s: %w", path, err)
 	}

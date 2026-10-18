@@ -4,6 +4,7 @@ package jellyfinsource_test
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -136,5 +137,55 @@ func TestSourceOpensReadOnly(t *testing.T) {
 	var count int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM Users`).Scan(&count); err != nil || count != 1 {
 		t.Errorf("users after read = %d, %v", count, err)
+	}
+}
+
+// A WAL-mode database copied with Jellyfin stopped must open from a
+// read-only directory, as the import guide mounts it (deadfin#697).
+func TestSourceOpensWALDatabaseInReadOnlyDirectory(t *testing.T) {
+	path := fixture(t)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mode string
+	if err := db.QueryRow(`PRAGMA journal_mode=WAL`).Scan(&mode); err != nil || mode != "wal" {
+		t.Fatalf("journal_mode = %q, %v", mode, err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(path)
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	src, err := jellyfinsource.Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer src.Close()
+	users, err := src.Users(t.Context())
+	if err != nil || len(users) != 1 {
+		t.Fatalf("Users = %d, %v", len(users), err)
+	}
+	for _, suffix := range []string{"-shm", "-wal"} {
+		if _, err := os.Stat(path + suffix); !os.IsNotExist(err) {
+			t.Errorf("%s exists after a read-only open: %v", suffix, err)
+		}
+	}
+}
+
+// A non-empty -wal file means the copy was taken while Jellyfin ran; an
+// immutable open would miss its committed changes.
+func TestSourceRefusesNonEmptyWAL(t *testing.T) {
+	path := fixture(t)
+	if err := os.WriteFile(path+"-wal", []byte("not empty"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if src, err := jellyfinsource.Open(t.Context(), path); err == nil {
+		_ = src.Close()
+		t.Fatal("Open with a non-empty -wal succeeded")
 	}
 }
