@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/deadfin-org/deadfin/internal/dto"
 	"github.com/deadfin-org/deadfin/internal/sourcefile"
 	"golang.org/x/sys/unix"
 )
@@ -67,6 +68,10 @@ type HLSRequest struct {
 	ExternalSubtitleSource   string
 	ExternalSubtitleRevision string
 	OpenExternalSubtitle     func() (*sourcefile.Source, error)
+	// TranscodingInfo is the session projection of this rendition. The
+	// manager reports it for DeviceID while the job runs, as upstream
+	// TranscodeManager.ReportTranscodingProgress does. Nil reports nothing.
+	TranscodingInfo *dto.TranscodingInfo
 }
 
 // HLSSegmentTiming is the exact interval represented by one requested HLS segment.
@@ -99,6 +104,7 @@ type hlsJob struct {
 	externalSubtitleSource   string
 	externalSubtitleRevision string
 	openExternalSubtitle     func() (*sourcefile.Source, error)
+	transcodingInfo          *dto.TranscodingInfo
 	retain                   bool
 }
 
@@ -212,6 +218,7 @@ func (manager *TranscodeManager) validateHLSRequest(request HLSRequest) (*hlsJob
 		externalSubtitleSource:   request.ExternalSubtitleSource,
 		externalSubtitleRevision: request.ExternalSubtitleRevision,
 		openExternalSubtitle:     request.OpenExternalSubtitle,
+		transcodingInfo:          request.TranscodingInfo,
 	}, args, nil
 }
 

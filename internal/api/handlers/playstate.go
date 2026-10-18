@@ -28,7 +28,13 @@ func RegisterPlaystate(rt *router.Router, service playstate.Application, activeS
 	if len(activeSessions) != 0 {
 		sessions = activeSessions[0]
 	}
-	RegisterPlaystateWithGrants(rt, service, sessions, nil)
+	RegisterPlaystateWithGrants(rt, service, sessions, nil, nil)
+}
+
+// TranscodingJobs reports whether a transcoding job runs for a
+// PlaySessionId (upstream ITranscodeManager.GetTranscodingJob).
+type TranscodingJobs interface {
+	HasTranscodingJob(playSessionID string) bool
 }
 
 // PlaySessionToucher refreshes the idle timer of a PlaySessionId grant (D-54).
@@ -38,9 +44,10 @@ type PlaySessionToucher interface {
 
 // RegisterPlaystateWithGrants is RegisterPlaystate with a grant store: every
 // playback report and ping keeps the reporting user's PlaySessionId grant
-// alive, so a long pause does not expire a direct stream (D-54).
-func RegisterPlaystateWithGrants(rt *router.Router, service playstate.Application, sessions *session.Manager, grants PlaySessionToucher) {
-	h := playstateHandler{service: service, sessions: sessions, grants: grants}
+// alive, so a long pause does not expire a direct stream (D-54). jobs
+// decides whether a Transcode report stays Transcode; nil means no job runs.
+func RegisterPlaystateWithGrants(rt *router.Router, service playstate.Application, sessions *session.Manager, grants PlaySessionToucher, jobs TranscodingJobs) {
+	h := playstateHandler{service: service, sessions: sessions, grants: grants, jobs: jobs}
 	policy := string(auth.PolicyDefaultAuthorization)
 
 	for _, route := range []struct {
@@ -66,6 +73,7 @@ type playstateHandler struct {
 	service  playstate.Application
 	sessions *session.Manager
 	grants   PlaySessionToucher
+	jobs     TranscodingJobs
 }
 
 func (h playstateHandler) touchGrant(r *http.Request, playSessionID string) {
@@ -351,10 +359,13 @@ func (dto playstateReportDTO) report(includePlaybackEnums bool) playstate.Report
 		} else {
 			state.PlaybackOrder = "Default"
 		}
+		// A missing PlayMethod binds to PlayMethod.Transcode, the enum's
+		// zero value (PlaybackProgressInfo.PlayMethod; the legacy routes
+		// use playMethod ?? PlayMethod.Transcode).
 		if dto.PlayMethod != nil {
-			state.PlayMethod = normalizePlayMethod(string(*dto.PlayMethod))
+			state.PlayMethod = string(*dto.PlayMethod)
 		} else {
-			state.PlayMethod = "DirectPlay"
+			state.PlayMethod = "Transcode"
 		}
 	}
 	if dto.PlaylistItemID != nil {
@@ -437,11 +448,17 @@ func unmarshalPlaystateEnum(data []byte, unmarshal func([]byte) error) error {
 	return unmarshal([]byte(value))
 }
 
-func normalizePlayMethod(value string) string {
-	if strings.EqualFold(value, "Transcode") {
+// validatePlayMethod is PlaystateController.ValidatePlayMethod: Transcode
+// stays Transcode only while a transcoding job runs for the PlaySessionId;
+// otherwise the report is DirectPlay. Other methods pass through.
+func (h playstateHandler) validatePlayMethod(method, playSessionID string) string {
+	if method != "Transcode" {
+		return method
+	}
+	if h.jobs == nil || strings.TrimSpace(playSessionID) == "" || !h.jobs.HasTranscodingJob(playSessionID) {
 		return "DirectPlay"
 	}
-	return value
+	return method
 }
 
 func validStopReport(w http.ResponseWriter, report playstate.Report) bool {
@@ -503,6 +520,9 @@ func (h playstateHandler) report(w http.ResponseWriter, r *http.Request, operati
 		if snapshot, found := h.sessions.Session(identity.Client, identity.DeviceID); found {
 			actor.Target = snapshot.Target
 		}
+	}
+	if operation != playstateStop {
+		report.PlayMethod = h.validatePlayMethod(report.PlayMethod, report.PlaySessionID)
 	}
 	var err error
 	switch operation {

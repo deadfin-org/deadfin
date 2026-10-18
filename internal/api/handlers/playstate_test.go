@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -117,8 +118,8 @@ func TestPlaystateStartMapsCaseInsensitiveBodyToAuthenticatedActor(t *testing.T)
 	}
 }
 
-// The aliases bind transport scalars exactly once. With no P6 transcode job,
-// the controller normalizes the legacy omitted/Transcode method to DirectPlay;
+// The aliases bind transport scalars exactly once. With no transcoding job,
+// ValidatePlayMethod turns the legacy omitted/Transcode method into DirectPlay;
 // explicit DirectStream and DirectPlay remain typed by the shared query binder.
 func TestPlaystateLegacyProgressBindsRouteAndQueryScalars(t *testing.T) {
 	service := &playstateHandlerFake{}
@@ -150,7 +151,7 @@ func TestPlaystateLegacyProgressBindsRouteAndQueryScalars(t *testing.T) {
 
 // Modern reports carry non-nullable playback enums. Their JSON zero values must
 // retain the source contract before the report reaches the playstate service:
-// omitted and Transcode both mean DirectPlay without a P6 transcode job, while
+// omitted and Transcode both mean DirectPlay without a transcoding job, while
 // the other valid enum values pass through unchanged.
 func TestPlaystateModernProgressNormalizesPlaybackEnums(t *testing.T) {
 	itemID := "00000000-0000-0000-0000-000000000506"
@@ -198,6 +199,91 @@ func TestPlaystateModernProgressNormalizesPlaybackEnums(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A missing PlayMethod binds to Transcode, and ValidatePlayMethod keeps
+// Transcode only while a transcoding job runs for the PlaySessionId
+// (PlaystateController.cs ValidatePlayMethod). Clients such as SharkParty omit
+// PlayMethod for HLS remux and transcode, so the job decides the label.
+func TestPlaystateValidatesPlayMethodAgainstTranscodingJobs(t *testing.T) {
+	itemID := "00000000-0000-0000-0000-000000000507"
+	for _, tc := range []struct {
+		name, path, body, wantPlayMethod string
+		jobs                             []string
+	}{
+		{
+			name:           "omitted method with an active job is Transcode",
+			path:           "/Sessions/Playing",
+			body:           `{"ItemId":"` + itemID + `","PlaySessionId":"hls-session"}`,
+			jobs:           []string{"hls-session"},
+			wantPlayMethod: "Transcode",
+		},
+		{
+			name:           "omitted method on progress with a job matched ignoring case is Transcode",
+			path:           "/Sessions/Playing/Progress",
+			body:           `{"ItemId":"` + itemID + `","PlaySessionId":"HLS-Session"}`,
+			jobs:           []string{"hls-session"},
+			wantPlayMethod: "Transcode",
+		},
+		{
+			name:           "omitted method without a job is DirectPlay",
+			path:           "/Sessions/Playing",
+			body:           `{"ItemId":"` + itemID + `","PlaySessionId":"direct-session"}`,
+			jobs:           []string{"hls-session"},
+			wantPlayMethod: "DirectPlay",
+		},
+		{
+			name:           "omitted method without a PlaySessionId is DirectPlay",
+			path:           "/Sessions/Playing/Progress",
+			body:           `{"ItemId":"` + itemID + `"}`,
+			jobs:           []string{""},
+			wantPlayMethod: "DirectPlay",
+		},
+		{
+			name:           "explicit DirectStream stays with an active job",
+			path:           "/Sessions/Playing/Progress",
+			body:           `{"ItemId":"` + itemID + `","PlaySessionId":"hls-session","PlayMethod":"DirectStream"}`,
+			jobs:           []string{"hls-session"},
+			wantPlayMethod: "DirectStream",
+		},
+		{
+			name:           "legacy start with omitted method and an active job is Transcode",
+			path:           "/PlayingItems/" + itemID + "?PlaySessionId=hls-session",
+			jobs:           []string{"hls-session"},
+			wantPlayMethod: "Transcode",
+		},
+		{
+			name:           "legacy progress with omitted method and no job is DirectPlay",
+			path:           "/PlayingItems/" + itemID + "/Progress?PlaySessionId=other",
+			jobs:           []string{"hls-session"},
+			wantPlayMethod: "DirectPlay",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			service := &playstateHandlerFake{}
+			rt := newPlaystateRouterWithJobs(service, playstateJobsFake(tc.jobs))
+			contentType := ""
+			if tc.body != "" {
+				contentType = "application/json"
+			}
+			rec := playstateRequest(rt, http.MethodPost, tc.path, tc.body, contentType)
+			assertPlaystateStatus(t, rec, http.StatusNoContent)
+			if got := service.lastCall(t).report.PlayMethod; got != tc.wantPlayMethod {
+				t.Fatalf("PlayMethod = %q, want %q", got, tc.wantPlayMethod)
+			}
+		})
+	}
+}
+
+type playstateJobsFake []string
+
+func (jobs playstateJobsFake) HasTranscodingJob(playSessionID string) bool {
+	for _, id := range jobs {
+		if strings.EqualFold(id, playSessionID) {
+			return true
+		}
+	}
+	return false
 }
 
 // Stop has report-only Failed state and a narrower DTO than Start/Progress.
@@ -451,6 +537,14 @@ func newPlaystateRouter(service playstate.Application) *router.Router {
 	authorizer := middleware.NewAuthorizer(playstateHandlerResolver{identity: identity}, playstateHandlerEvaluator{}, playstateHandlerUsers{})
 	rt := router.New(authorizer.Wrap)
 	handlers.RegisterPlaystate(rt, service)
+	return rt
+}
+
+func newPlaystateRouterWithJobs(service playstate.Application, jobs handlers.TranscodingJobs) *router.Router {
+	identity := auth.Identity{Authenticated: true, UserID: dto.UUID{0x50, 0x1}, Client: "Authenticated Client", DeviceID: "authenticated-device"}
+	authorizer := middleware.NewAuthorizer(playstateHandlerResolver{identity: identity}, playstateHandlerEvaluator{}, playstateHandlerUsers{})
+	rt := router.New(authorizer.Wrap)
+	handlers.RegisterPlaystateWithGrants(rt, service, nil, nil, jobs)
 	return rt
 }
 

@@ -172,7 +172,10 @@ type transcodeJob struct {
 	downloadPositionTicks int64
 	bytesDownloaded       int64
 
-	hls            *hlsJob
+	hls *hlsJob
+	// playSessionID is the progressive request's PlaySessionId. HLS jobs
+	// keep theirs on hls.
+	playSessionID  string
 	sourceRevision string
 	openSource     func() (*sourcefile.Source, error)
 	source         *sourcefile.Source
@@ -355,6 +358,7 @@ func (manager *TranscodeManager) OpenProgressive(ctx context.Context, request Pr
 				waitDone:       make(chan struct{}),
 				requests:       1,
 				state:          transcodeStarting,
+				playSessionID:  request.PlaySessionID,
 				sourceRevision: request.SourceRevision,
 				openSource:     request.OpenSource,
 			}

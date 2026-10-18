@@ -91,6 +91,8 @@ type HLSJobRequest struct {
 	MaxForwardGap  int
 	RunTimeTicks   int64
 	StartTimeTicks int64
+	// TranscodingInfo is the session projection of this rendition.
+	TranscodingInfo *dto.TranscodingInfo
 }
 
 // HLSTrickplayMetadata describes one image-tile rendition advertised by a
@@ -1464,7 +1466,77 @@ func (service *HLSService) managerRequest(prepared preparedHLS, live, seekSegmen
 		MaxForwardGap:        maxForwardGap,
 		RunTimeTicks:         int64PointerValue(prepared.source.RunTimeTicks),
 		StartTimeTicks:       startTimeTicks,
+		TranscodingInfo:      hlsTranscodingInfo(prepared, job.EncodingJob),
 	}, nil
+}
+
+// hlsTranscodingInfo is the TranscodingInfo upstream
+// TranscodeManager.ReportTranscodingProgress reports for a job before ffmpeg
+// prints progress: the actual output codecs (the source codec for a copy,
+// StreamState.ActualOutputVideoCodec), the output container, size, and
+// channels, the copy flags, the configured acceleration, and the
+// TranscodeReasons of the request.
+func hlsTranscodingInfo(prepared preparedHLS, job encoding.EncodingJob) *dto.TranscodingInfo {
+	request := prepared.request
+	info := &dto.TranscodingInfo{
+		IsVideoDirect:    job.OutputVideoCodec == "copy",
+		IsAudioDirect:    job.OutputAudioCodec == "copy",
+		TranscodeReasons: []string{},
+	}
+	if !request.AudioOnly && job.VideoStream.Codec != "" {
+		info.VideoCodec = transcodingCodec(job.OutputVideoCodec, job.VideoStream.Codec)
+		width, height := job.OutputWidth, job.OutputHeight
+		if info.IsVideoDirect || width <= 0 || height <= 0 {
+			width, height = job.VideoStream.Width, job.VideoStream.Height
+		}
+		info.Width = positiveInt(width)
+		info.Height = positiveInt(height)
+	}
+	if job.AudioStream.Codec != "" {
+		info.AudioCodec = transcodingCodec(job.OutputAudioCodec, job.AudioStream.Codec)
+		channels := job.OutputAudioChannels
+		if info.IsAudioDirect || channels <= 0 {
+			channels = job.AudioStream.Channels
+		}
+		info.AudioChannels = positiveInt(channels)
+	}
+	container := request.SegmentContainer
+	if container == "" {
+		container = job.OutputContainer
+	}
+	if container != "" {
+		info.Container = &container
+	}
+	info.Bitrate = positiveInt(job.OutputVideoBitrate + job.OutputAudioBitrate)
+	hardware := strings.ToLower(job.Hardware.Type)
+	if hardware == "" {
+		hardware = "none"
+	}
+	info.HardwareAccelerationType = &hardware
+	for _, reason := range strings.Split(request.TranscodeReasons, ",") {
+		if reason = strings.TrimSpace(reason); reason != "" {
+			info.TranscodeReasons = append(info.TranscodeReasons, reason)
+		}
+	}
+	return info
+}
+
+func transcodingCodec(output, source string) *string {
+	codec := output
+	if codec == "copy" || codec == "" {
+		codec = source
+	}
+	if codec == "" {
+		return nil
+	}
+	return &codec
+}
+
+func positiveInt(value int) *int {
+	if value <= 0 {
+		return nil
+	}
+	return &value
 }
 
 // hlsKeyframeRestart returns the start of a keyframe-cut job for an advertised

@@ -20,10 +20,18 @@ import (
 // Both GET /Sessions and the Sessions WebSocket feed use this instance so the
 // two transports cannot drift.
 type Projector struct {
-	users    *user.Service
-	items    *store.ItemStore
-	builder  *dtobuild.Builder
-	serverID string
+	users       *user.Service
+	items       *store.ItemStore
+	builder     *dtobuild.Builder
+	serverID    string
+	transcoding TranscodingSource
+}
+
+// TranscodingSource reports the running transcode of a device. Upstream
+// keeps it on SessionInfo.TranscodingInfo (SessionManager.ReportTranscodingInfo)
+// while the transcoding job runs.
+type TranscodingSource interface {
+	TranscodingInfo(deviceID string) (dto.TranscodingInfo, bool)
 }
 
 // New constructs a shared session projector. Nil store dependencies retain the
@@ -32,9 +40,22 @@ func New(users *user.Service, items *store.ItemStore, builder *dtobuild.Builder,
 	return &Projector{users: users, items: items, builder: builder, serverID: serverID}
 }
 
+// WithTranscoding returns a copy of the projector that fills
+// TranscodingInfo from source. A nil source leaves it empty.
+func (projector *Projector) WithTranscoding(source TranscodingSource) *Projector {
+	copied := *projector
+	copied.transcoding = source
+	return &copied
+}
+
 // Project renders one immutable registry snapshot.
 func (projector *Projector) Project(ctx context.Context, snapshot session.Snapshot, userName string) dto.SessionInfoDto {
 	projected := ProjectBase(snapshot, userName, projector.serverID)
+	if projector.transcoding != nil {
+		if info, ok := projector.transcoding.TranscodingInfo(snapshot.DeviceID); ok {
+			projected.TranscodingInfo = &info
+		}
+	}
 	if projector.users != nil && len(snapshot.AdditionalUserIDs) != 0 {
 		projected.AdditionalUsers = make([]dto.SessionUserInfo, len(snapshot.AdditionalUserIDs))
 		for index, userID := range snapshot.AdditionalUserIDs {

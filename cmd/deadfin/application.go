@@ -457,7 +457,11 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		},
 	})
 	playstateApplication := listenbrainz.Wrap(playstateService, listenScrobbler)
-	sessionProjector := sessiondto.New(users, items, itemBuilder, identityConfig.ID.String())
+	transcodes, err = ffmpeg.NewTranscodeManager("ffmpeg", paths.Transcodes, ffmpeg.TranscodeManagerOptions{Clock: realClock, LogDirectory: paths.Log, Logger: slog.Default(), PKeySupported: appConfig.encodingCapabilities.SupportsPKeyPause})
+	if err != nil {
+		return nil, fmt.Errorf("open progressive transcode manager: %w", err)
+	}
+	sessionProjector := sessiondto.New(users, items, itemBuilder, identityConfig.ID.String()).WithTranscoding(transcodingState{manager: transcodes})
 	webSockets = ws.New(ws.Config{
 		Clock:            realClock,
 		Sessions:         sessions,
@@ -511,10 +515,6 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		Paths:          virtualPaths,
 		Encoding:       transcodeEncoding,
 	})
-	transcodes, err = ffmpeg.NewTranscodeManager("ffmpeg", paths.Transcodes, ffmpeg.TranscodeManagerOptions{Clock: realClock, LogDirectory: paths.Log, Logger: slog.Default(), PKeySupported: appConfig.encodingCapabilities.SupportsPKeyPause})
-	if err != nil {
-		return nil, fmt.Errorf("open progressive transcode manager: %w", err)
-	}
 	progressiveService := playback.NewProgressiveVideoService(playback.ProgressiveServiceConfig{
 		Sources:      playbackService,
 		TranscodeDir: paths.Transcodes,
@@ -714,6 +714,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		clock:              realClock,
 		network:            network,
 		playGrants:         playGrants,
+		transcoding:        transcodingState{manager: transcodes},
 		users:              users,
 		apiKeys:            identity,
 		localization:       localizationService,
@@ -979,6 +980,7 @@ func (adapter hlsTranscodeManager) request(request playback.HLSJobRequest) ffmpe
 		EmbeddedSubtitleSource: request.EmbeddedSubtitleSource,
 		ExternalSubtitleSource: request.ExternalSubtitleSource, ExternalSubtitleRevision: request.ExternalSubtitleRevision,
 		OpenExternalSubtitle: request.OpenExternalSubtitle,
+		TranscodingInfo:      request.TranscodingInfo,
 	}
 }
 
@@ -1942,6 +1944,7 @@ type routeServices struct {
 	startup            interface{ StartupWizardCompleted() bool }
 	network            auth.LocalNetwork
 	playGrants         *playgrant.Store
+	transcoding        transcodingState
 	setupGate          *middleware.SetupGate
 	manager            *config.Manager
 	users              *user.Service
@@ -1981,6 +1984,22 @@ type routeServices struct {
 	subtitleEditor     handlers.SubtitleEditor
 	scheduler          scheduledTaskService
 	activity           *activitylog.Log
+}
+
+// transcodingState answers the session and playstate questions about running
+// transcodes. A nil manager has no jobs, so the handlers never see a typed nil
+// pointer.
+type transcodingState struct{ manager *ffmpeg.TranscodeManager }
+
+func (state transcodingState) HasTranscodingJob(playSessionID string) bool {
+	return state.manager != nil && state.manager.HasTranscodingJob(playSessionID)
+}
+
+func (state transcodingState) TranscodingInfo(deviceID string) (dto.TranscodingInfo, bool) {
+	if state.manager == nil {
+		return dto.TranscodingInfo{}, false
+	}
+	return state.manager.TranscodingInfo(deviceID)
 }
 
 // personRefresher keeps a nil service out of the handler seam: a typed nil
@@ -2076,7 +2095,7 @@ func registerRoutes(rt *router.Router, services routeServices) {
 		playlistBuilder = services.itemBuilder
 	}
 	handlers.RegisterPlaylists(rt, playlistService, playlistUsers, playlistBuilder, services.clock)
-	handlers.RegisterAuth(rt, services.login, services.users, services.sessions, services.items, services.itemBuilder, services.identity, services.startup, services.network)
+	handlers.RegisterAuth(rt, services.login, services.users, services.sessions, services.items, services.itemBuilder, services.identity, services.startup, services.network, services.transcoding)
 	handlers.RegisterSessionLogout(rt, services.users, services.sessions, services.webSockets)
 	handlers.RegisterAPIKeys(rt, services.apiKeys, services.clock, rand.Reader)
 	handlers.RegisterClientLog(rt, handlers.ClientLogConfig{
@@ -2097,7 +2116,7 @@ func registerRoutes(rt *router.Router, services routeServices) {
 	handlers.RegisterShows(rt, services.items, services.itemBuilder, services.items, services.users, services.clock, services.manager)
 	handlers.RegisterUserViews(rt, services.views, services.itemBuilder)
 	handlers.RegisterPlaybackInfo(rt, services.playback, services.users, services.playGrants)
-	handlers.RegisterPlaystateWithGrants(rt, services.playstate, services.sessions, services.playGrants)
+	handlers.RegisterPlaystateWithGrants(rt, services.playstate, services.sessions, services.playGrants, services.transcoding)
 	handlers.RegisterSessionControl(rt, services.sessionControl)
 	handlers.RegisterDirectVideoStreams(rt, services.directFiles, services.progressive)
 	handlers.RegisterDirectAudioStreams(rt, services.directFiles, services.users, services.playback, services.progressive, services.hls)

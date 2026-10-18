@@ -75,6 +75,10 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- Sessions report the real play method. A report with no `PlayMethod` is
+  `Transcode` while a transcoding job runs for its `PlaySessionId`, else
+  `DirectPlay`, as upstream does. `/Sessions` carries `TranscodingInfo` for a
+  running HLS job, so an HLS remux no longer shows as direct play (#635).
 - Comma-delimited enum query parameters drop unknown values, as upstream
   does. Infuse home rows (`/Items/Latest` with an Emby field) load again.
 - `GET /MediaSegments/{itemId}` returns an empty `QueryResult` for a known

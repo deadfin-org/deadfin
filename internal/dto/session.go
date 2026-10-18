@@ -28,7 +28,7 @@ type SessionInfoDto struct {
 	NowViewingItem        *json.RawMessage    `json:"NowViewingItem,omitempty"`
 	DeviceID              *string             `json:"DeviceId,omitempty"`
 	ApplicationVersion    *string             `json:"ApplicationVersion,omitempty"`
-	TranscodingInfo       *json.RawMessage    `json:"TranscodingInfo,omitempty"`
+	TranscodingInfo       *TranscodingInfo    `json:"TranscodingInfo,omitempty"`
 	IsActive              bool                `json:"IsActive"`
 	SupportsMediaControl  bool                `json:"SupportsMediaControl"`
 	SupportsRemoteControl bool                `json:"SupportsRemoteControl"`
@@ -38,6 +38,25 @@ type SessionInfoDto struct {
 	ServerID              *string             `json:"ServerId,omitempty"`
 	UserPrimaryImageTag   *string             `json:"UserPrimaryImageTag,omitempty"`
 	SupportedCommands     []string            `json:"SupportedCommands"`
+}
+
+// TranscodingInfo is Jellyfin's projection of a running transcode
+// (MediaBrowser.Model/Session/TranscodingInfo.cs). TranscodeReasons is a
+// non-nullable flags value, so it is always emitted.
+type TranscodingInfo struct {
+	AudioCodec               *string  `json:"AudioCodec,omitempty"`
+	VideoCodec               *string  `json:"VideoCodec,omitempty"`
+	Container                *string  `json:"Container,omitempty"`
+	IsVideoDirect            bool     `json:"IsVideoDirect"`
+	IsAudioDirect            bool     `json:"IsAudioDirect"`
+	Bitrate                  *int     `json:"Bitrate,omitempty"`
+	Framerate                *float32 `json:"Framerate,omitempty"`
+	CompletionPercentage     *float64 `json:"CompletionPercentage,omitempty"`
+	Width                    *int     `json:"Width,omitempty"`
+	Height                   *int     `json:"Height,omitempty"`
+	AudioChannels            *int     `json:"AudioChannels,omitempty"`
+	HardwareAccelerationType *string  `json:"HardwareAccelerationType,omitempty"`
+	TranscodeReasons         []string `json:"TranscodeReasons"`
 }
 
 // PlayerStateInfo is the current player-state projection carried by sessions.

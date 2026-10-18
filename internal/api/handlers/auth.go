@@ -25,8 +25,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func RegisterAuth(rt *router.Router, login *auth.Login, users *user.Service, sessions *session.Manager, items *store.ItemStore, itemBuilder *dtobuild.Builder, identity config.ServerIdentity, startup interface{ StartupWizardCompleted() bool }, network auth.LocalNetwork) {
-	h := authHandler{login: login, users: users, sessions: sessions, items: items, itemBuilder: itemBuilder, identity: identity, startup: startup, network: network}
+func RegisterAuth(rt *router.Router, login *auth.Login, users *user.Service, sessions *session.Manager, items *store.ItemStore, itemBuilder *dtobuild.Builder, identity config.ServerIdentity, startup interface{ StartupWizardCompleted() bool }, network auth.LocalNetwork, transcoding sessiondto.TranscodingSource) {
+	h := authHandler{login: login, users: users, sessions: sessions, items: items, itemBuilder: itemBuilder, identity: identity, startup: startup, network: network, transcoding: transcoding}
 	rt.Handle(http.MethodPost, "/Users/AuthenticateByName", router.Route{OperationID: "AuthenticateUserByName", Anonymous: true}, h.loginByName)
 	rt.Handle(http.MethodPost, "/Users/{userId}/Authenticate", router.Route{OperationID: "SHADOW:AuthenticateUser", Anonymous: true}, h.loginLegacy)
 	rt.Handle(http.MethodGet, "/Users/Me", router.Route{OperationID: "GetCurrentUser", Policy: string(auth.PolicyDefaultAuthorization)}, h.me)
@@ -53,6 +53,7 @@ type authHandler struct {
 	sessions    *session.Manager
 	items       *store.ItemStore
 	itemBuilder *dtobuild.Builder
+	transcoding sessiondto.TranscodingSource
 
 	identity config.ServerIdentity
 	startup  interface{ StartupWizardCompleted() bool }
@@ -565,5 +566,5 @@ func (h authHandler) projectUser(v user.UserDTO) dto.UserDto {
 }
 
 func (h authHandler) projectSession(ctx context.Context, snapshot session.Snapshot, userName, serverID string) dto.SessionInfoDto {
-	return sessiondto.New(h.users, h.items, h.itemBuilder, serverID).Project(ctx, snapshot, userName)
+	return sessiondto.New(h.users, h.items, h.itemBuilder, serverID).WithTranscoding(h.transcoding).Project(ctx, snapshot, userName)
 }
