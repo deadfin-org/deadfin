@@ -79,6 +79,14 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- A library scan keeps a folder that holds two names that differ only in
+  case, such as `Live` and `live` on a case-sensitive NFS or ZFS share. Both
+  names gave the same item ID, and the whole folder failed on every scan: an
+  artist's discography, a season, or at the library root the whole library
+  stayed missing. The scan now keeps the first name in ordinal order and logs
+  the other as skipped (D-85). A directory entry whose file status cannot be
+  read is skipped with a warning; before, one such entry failed the listing
+  of its whole directory (#702).
 - A multi-disc album is one album, as in Jellyfin. An album folder whose
   tracks are in disc folders (`CD 01`, `Disc 1`, `Digital Media 01`, and the
   other Jellyfin disc names) is the MusicAlbum, its parent folder is the

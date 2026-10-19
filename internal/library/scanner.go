@@ -405,9 +405,6 @@ func NewScanner(topology *Topology, items *store.ItemStore, chain *Chain, option
 			options.Concurrency = 1
 		}
 	}
-	if options.ReadDir == nil {
-		options.ReadDir = readDirectory
-	}
 	if options.Clock == nil {
 		options.Clock = clock.NewReal()
 	}
@@ -420,6 +417,13 @@ func NewScanner(topology *Topology, items *store.ItemStore, chain *Chain, option
 		// manual RefreshExistingMetadata warnings do not pollute the test
 		// output. The production wiring in cmd/deadfin passes a live logger.
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	if options.ReadDir == nil {
+		options.ReadDir = func(path string) ([]Entry, error) {
+			return readDirectoryReporting(path, func(entryPath string, err error) {
+				logger.Warn("scanner: skip unreadable directory entry", "path", entryPath, "error", err)
+			})
+		}
 	}
 	drained := make(chan struct{})
 	close(drained)
@@ -2179,6 +2183,7 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 	}
 	desired = append(desired, flattened...)
 	desired = append(desired, stackedParts...)
+	desired, collisions := dropIdentityCollisions(desired)
 	for index := range desired {
 		inheritHierarchyNames(&desired[index], task.folder, task.ancestors)
 	}
@@ -2340,13 +2345,14 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 	materializeScannedSourceFacts(desired, resolutionSources, task.options)
 	normalizePlanCredits(desired)
 	normalizePlanValues(desired)
-	desired, media, skipped := quarantinePlan(task.folder.ID, desired, media, existingByPath, func(parentID dto.UUID, child item.Item) error {
+	desired, media, quarantined := quarantinePlan(task.folder.ID, desired, media, existingByPath, func(parentID dto.UUID, child item.Item) error {
 		return s.items.ValidateReconcileChild(parentID, child)
 	})
-	quarantinedIDs := make(map[dto.UUID]struct{}, len(skipped))
-	for _, skip := range skipped {
+	quarantinedIDs := make(map[dto.UUID]struct{}, len(quarantined))
+	for _, skip := range quarantined {
 		quarantinedIDs[skip.ItemID] = struct{}{}
 	}
+	skipped := append(collisions, quarantined...)
 	if err := validatePlan(task.folder.ID, desired); err != nil {
 		return folderResolution{}, fmt.Errorf("validate folder plan: %w", err)
 	}
@@ -3110,6 +3116,58 @@ func equivalentVirtualFolder(left, right item.Item) bool {
 	return reflect.DeepEqual(left, right)
 }
 
+// dropIdentityCollisions keeps one candidate per item ID and reports the
+// others as skipped. Item IDs hash the lowercased path, so two entries whose
+// names differ only in case (for example "Live" and "live" on a
+// case-sensitive filesystem) resolve to the same ID. Without this pass the
+// folder plan fails validation on every scan, and the folder's whole subtree
+// stays out of the library. Upstream resolves each path on its own and
+// isolates a failure to that path (LibraryManager.ResolveFileList). The
+// candidate with the ordinal-lowest path wins, so the choice does not depend
+// on directory listing order.
+func dropIdentityCollisions(desired []item.Item) ([]item.Item, []RefreshProgress) {
+	winners := make(map[dto.UUID]int, len(desired))
+	collided := false
+	for index, candidate := range desired {
+		previous, found := winners[candidate.ID]
+		if !found {
+			winners[candidate.ID] = index
+			continue
+		}
+		collided = true
+		if plannedPath(candidate) < plannedPath(desired[previous]) {
+			winners[candidate.ID] = index
+		}
+	}
+	if !collided {
+		return desired, nil
+	}
+	result := make([]item.Item, 0, len(winners))
+	var skipped []RefreshProgress
+	for index, candidate := range desired {
+		winner := winners[candidate.ID]
+		if winner == index {
+			result = append(result, candidate)
+			continue
+		}
+		path := plannedPath(candidate)
+		skipped = append(skipped, RefreshProgress{
+			ItemID: candidate.ID,
+			Path:   path,
+			Status: "skipped",
+			Error:  fmt.Errorf("skip item %s: item id %s is also the id of %s; the paths differ only in case", path, candidate.ID, plannedPath(desired[winner])),
+		})
+	}
+	return result, skipped
+}
+
+func plannedPath(candidate item.Item) string {
+	if candidate.Path == nil {
+		return ""
+	}
+	return *candidate.Path
+}
+
 func validatePlan(parentID dto.UUID, desired []item.Item) error {
 	if parentID.IsNil() {
 		return errors.New("parent id is required")
@@ -3133,7 +3191,18 @@ func validatePlan(parentID dto.UUID, desired []item.Item) error {
 	return nil
 }
 
-func readDirectory(path string) (result []Entry, err error) {
+func readDirectory(path string) ([]Entry, error) {
+	return readDirectoryReporting(path, nil)
+}
+
+// readDirectoryReporting lists path. An entry whose file status cannot be
+// read is skipped and reported to skip, and the other entries stay in the
+// listing. Upstream enumerates with IgnoreInaccessible and reads each entry's
+// metadata separately (ManagedFileSystem.GetFileSystemEntries), so one
+// unreadable entry does not hide its siblings. A transient stat error on a
+// network mount (ESTALE, EIO) would otherwise drop the whole directory and
+// its subtree from the scan.
+func readDirectoryReporting(path string, skip func(string, error)) (result []Entry, err error) {
 	directory, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -3152,7 +3221,10 @@ func readDirectory(path string) (result []Entry, err error) {
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
-			return nil, err
+			if skip != nil {
+				skip(filepath.Join(path, entry.Name()), err)
+			}
+			continue
 		}
 		mode := info.Mode()
 		if !mode.IsRegular() && !mode.IsDir() {
