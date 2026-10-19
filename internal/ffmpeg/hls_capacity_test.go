@@ -75,7 +75,10 @@ func TestHLSCapacityBudgetPausesAndResumesThrottleThroughManager(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	observed.waitForTimer(t, 5*time.Second)
+	// The throttler re-arms its 5-second timer after it writes p. Advance
+	// only after the second timer exists; an earlier advance moves the
+	// clock past nothing, and the throttler then never wakes.
+	observed.waitForTimerCount(t, 5*time.Second, 2)
 	base.Advance(5 * time.Second)
 	fixture.waitU(t, "cap-budget")
 }

@@ -1010,31 +1010,6 @@ func (manager *TranscodeManager) logFailure(job *transcodeJob, message string, e
 	logger.Error(message, attrs...)
 }
 
-func reapProcessGroup(pid int) error {
-	for attempt := 0; attempt < 100; attempt++ {
-		err := syscall.Kill(-pid, 0)
-		if errors.Is(err, syscall.ESRCH) {
-			return nil
-		}
-		if err != nil {
-			if errors.Is(err, syscall.EPERM) {
-				time.Sleep(time.Millisecond)
-				continue
-			}
-			return err
-		}
-		if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-			if errors.Is(err, syscall.EPERM) {
-				time.Sleep(time.Millisecond)
-				continue
-			}
-			return err
-		}
-		time.Sleep(time.Millisecond)
-	}
-	return fmt.Errorf("ffmpeg process group %d survived SIGKILL", pid)
-}
-
 func (manager *TranscodeManager) retryPendingReaps(ctx context.Context) error {
 	manager.mu.Lock()
 	pending := make([]*transcodeJob, 0)
