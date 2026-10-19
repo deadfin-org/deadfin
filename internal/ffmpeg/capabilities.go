@@ -10,6 +10,7 @@ import (
 	"io"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,6 +74,9 @@ type Capabilities struct {
 	Filters   []string
 	BSFs      []string
 	HWAccels  []string
+	// BSFOptions lists the probed "filter=option" pairs of
+	// BitStreamFilterOptions, for example "hevc_metadata=remove_dovi".
+	BSFOptions []string
 	// PKeyPause reports the "p" pause and "u" unpause runtime keys of
 	// jellyfin-ffmpeg. Without them, the throttler falls back to the "c" key,
 	// which does not stop the threaded pipeline of FFmpeg 7 and later.
@@ -122,7 +126,41 @@ func ProbeCapabilitiesWithOptions(ctx context.Context, path string, options Capa
 		*request.into = parseListedCapabilities(string(output), request.arg)
 	}
 	caps.PKeyPause = probeRuntimeKey(ctx, path, options, pKeyPauseHelp)
+	caps.BSFOptions = probeBSFOptions(ctx, path, options, caps.BSFs)
 	return caps, nil
+}
+
+// probeBSFOptions ports EncoderValidator.CheckBitStreamFilterWithOption
+// (EncoderValidator.cs:517-543): "-h bsf=<filter>" must name the filter and
+// list the option. A failed probe reports no support, as upstream does. A
+// filter that -bsfs does not list is not probed.
+func probeBSFOptions(ctx context.Context, path string, options CapabilityOptions, bsfs []string) []string {
+	// The options of EncoderValidator._bsfOptionsDict
+	// (EncoderValidator.cs:170-177), as "filter=option".
+	entries := [...]string{
+		"hevc_metadata=remove_dovi",
+		"hevc_metadata=remove_hdr10plus",
+		"av1_metadata=remove_dovi",
+		"av1_metadata=remove_hdr10plus",
+		"dovi_rpu=strip",
+	}
+	help := map[string][]byte{}
+	var supported []string
+	for _, entry := range entries {
+		filter, option, _ := strings.Cut(entry, "=")
+		if !slices.Contains(bsfs, filter) {
+			continue
+		}
+		output, probed := help[filter]
+		if !probed {
+			output, _ = runProbeCommand(ctx, path, options, true, "-hide_banner", "-h", "bsf="+filter)
+			help[filter] = output
+		}
+		if bytes.Contains(output, []byte("Bit stream filter "+filter)) && bytes.Contains(output, []byte(option)) {
+			supported = append(supported, entry)
+		}
+	}
+	return supported
 }
 
 // probeRuntimeKey ports EncoderValidator.CheckSupportedRuntimeKey

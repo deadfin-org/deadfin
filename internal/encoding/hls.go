@@ -25,6 +25,12 @@ type HLSJob struct {
 	RunTimeTicks      int64
 	Live              bool
 	DirectDolbyVision bool
+	// RemoveDynamicHDR removes Dolby Vision or HDR10+ metadata from a video
+	// copy with a bitstream filter (EncodingHelper.GetBitStreamArgs,
+	// EncodingHelper.cs:1487-1556). The caller decides the plan. The filter
+	// applies also to a source with an unknown NAL length size, where
+	// upstream adds no bitstream filter (D-84).
+	RemoveDynamicHDR DynamicHDRRemoval
 	// KeyframeCuts makes a video-copy job cut a segment at every source
 	// keyframe (-hls_time 0), so that output segment N is source GOP N
 	// whatever the start point. StartOffsetTicks is then the exact input
@@ -36,6 +42,18 @@ type HLSJob struct {
 	// transcode.
 	PadAudioStart bool
 }
+
+// DynamicHDRRemoval ports DynamicHdrMetadataRemovalPlan.
+type DynamicHDRRemoval int
+
+const (
+	// RemoveNoDynamicHDR keeps the dynamic HDR metadata.
+	RemoveNoDynamicHDR DynamicHDRRemoval = iota
+	// RemoveDolbyVision strips the Dolby Vision RPU and enhancement layer.
+	RemoveDolbyVision
+	// RemoveHDR10Plus strips the HDR10+ SEI messages.
+	RemoveHDR10Plus
+)
 
 // hlsPadSampleRate is the pad filter output rate when the job sets none.
 const hlsPadSampleRate = 48_000
@@ -126,7 +144,7 @@ func validateHLSJob(job HLSJob, caps Capabilities) error {
 	if isAudioOnlyHLSJob(job.EncodingJob) {
 		return validateAudioOnlyHLSJob(job.EncodingJob, caps)
 	}
-	if job.OutputVideoCodec == "copy" && requiresDirectDolbyVision(job.VideoStream) && !job.DirectDolbyVision {
+	if job.OutputVideoCodec == "copy" && requiresDirectDolbyVision(job.VideoStream) && !job.DirectDolbyVision && job.RemoveDynamicHDR != RemoveDolbyVision {
 		return fmt.Errorf("hls Dolby Vision copy without a compatible base layer requires a direct Dolby Vision request")
 	}
 	if subtitle := job.SubtitleStream; subtitle != nil && subtitle.BurnIn && isHLSGraphicalSubtitle(subtitle) {
@@ -237,7 +255,7 @@ func appendHLSVideoArgs(args []string, job HLSJob, caps Capabilities, plan video
 				args = append(args, "-bsf:v", "h264_mp4toannexb")
 			}
 		case "hevc", "h265":
-			if isDOVIVideo(job.VideoStream) && job.DirectDolbyVision {
+			if isDOVIVideo(job.VideoStream) && job.DirectDolbyVision && job.RemoveDynamicHDR != RemoveDolbyVision {
 				tag := "dvh1"
 				if isDOVIWithHLG(job.VideoStream) {
 					tag = "hvc1"
@@ -246,12 +264,36 @@ func appendHLSVideoArgs(args []string, job HLSJob, caps Capabilities, plan video
 			} else {
 				args = append(args, "-tag:v:0", "hvc1")
 			}
+			var filters []string
 			if job.VideoStream.NalLengthSize != "0" {
-				args = append(args, "-bsf:v", "hevc_mp4toannexb")
+				filters = append(filters, "hevc_mp4toannexb")
+			}
+			switch job.RemoveDynamicHDR {
+			case RemoveDolbyVision:
+				if caps.SupportsBSFOption("hevc_metadata=remove_dovi") {
+					filters = append(filters, "hevc_metadata=remove_dovi=1")
+				} else {
+					filters = append(filters, "dovi_rpu=strip=1")
+				}
+			case RemoveHDR10Plus:
+				filters = append(filters, "hevc_metadata=remove_hdr10plus=1")
+			}
+			if len(filters) != 0 {
+				args = append(args, "-bsf:v", strings.Join(filters, ","))
 			}
 		case "av1":
-			if isDOVIVideo(job.VideoStream) && job.DirectDolbyVision {
+			if isDOVIVideo(job.VideoStream) && job.DirectDolbyVision && job.RemoveDynamicHDR != RemoveDolbyVision {
 				args = append(args, "-tag:v:0", "dav1", "-strict", "-2")
+			}
+			switch job.RemoveDynamicHDR {
+			case RemoveDolbyVision:
+				if caps.SupportsBSFOption("av1_metadata=remove_dovi") {
+					args = append(args, "-bsf:v", "av1_metadata=remove_dovi=1")
+				} else {
+					args = append(args, "-bsf:v", "dovi_rpu=strip=1")
+				}
+			case RemoveHDR10Plus:
+				args = append(args, "-bsf:v", "av1_metadata=remove_hdr10plus=1")
 			}
 		}
 		return append(args, "-start_at_zero")

@@ -1006,3 +1006,82 @@ func TestBuildHLSArgsRejectsKeyframeCutsOutsideVODVideoCopy(t *testing.T) {
 		}
 	}
 }
+
+// GetBitStreamArgs (EncodingHelper.cs:1487-1556) appends the dynamic HDR
+// removal filter to the copy bitstream filter. hevc_metadata=remove_dovi wins
+// over dovi_rpu=strip when ffmpeg has it.
+func TestBuildHLSArgsRemovesDynamicHDRFromVideoCopy(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		codec   string
+		nal     string
+		removal DynamicHDRRemoval
+		options []string
+		want    string
+	}{
+		{name: "HEVC DOVI via hevc_metadata", codec: "hevc", removal: RemoveDolbyVision, options: []string{"hevc_metadata=remove_dovi", "dovi_rpu=strip"}, want: "hevc_mp4toannexb,hevc_metadata=remove_dovi=1"},
+		{name: "HEVC DOVI via dovi_rpu", codec: "hevc", removal: RemoveDolbyVision, options: []string{"dovi_rpu=strip"}, want: "hevc_mp4toannexb,dovi_rpu=strip=1"},
+		{name: "HEVC HDR10+", codec: "hevc", removal: RemoveHDR10Plus, options: []string{"hevc_metadata=remove_hdr10plus"}, want: "hevc_mp4toannexb,hevc_metadata=remove_hdr10plus=1"},
+		{name: "HEVC none", codec: "hevc", want: "hevc_mp4toannexb"},
+		{name: "AV1 DOVI via av1_metadata", codec: "av1", removal: RemoveDolbyVision, options: []string{"av1_metadata=remove_dovi"}, want: "av1_metadata=remove_dovi=1"},
+		{name: "AV1 DOVI via dovi_rpu", codec: "av1", removal: RemoveDolbyVision, options: []string{"dovi_rpu=strip"}, want: "dovi_rpu=strip=1"},
+		{name: "AV1 HDR10+", codec: "av1", removal: RemoveHDR10Plus, want: "av1_metadata=remove_hdr10plus=1"},
+		{name: "HEVC DOVI without NAL length size", codec: "hevc", nal: "0", removal: RemoveDolbyVision, options: []string{"hevc_metadata=remove_dovi"}, want: "hevc_metadata=remove_dovi=1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			job := hlsUnitJob()
+			job.OutputContainer = "fmp4"
+			job.OutputVideoCodec = "copy"
+			job.RemoveDynamicHDR = test.removal
+			job.VideoStream = VideoStream{Index: 0, Codec: test.codec, NalLengthSize: "4"}
+			if test.nal != "" {
+				job.VideoStream.NalLengthSize = test.nal
+			}
+			caps := progressiveTestCapabilities()
+			caps.BSFOptions = test.options
+
+			args, err := BuildHLSArgs(job, caps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := argumentValue(t, args, "-bsf:v"); got != test.want {
+				t.Fatalf("-bsf:v = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+// A profile 7 copy with the RPU removed is a plain HDR10 HEVC stream: it
+// takes the hvc1 tag and no -strict -2, even for a direct request.
+func TestBuildHLSArgsTagsDolbyVisionRemovedCopyAsHVC1(t *testing.T) {
+	job := hlsUnitJob()
+	job.OutputContainer = "fmp4"
+	job.OutputVideoCodec = "copy"
+	job.DirectDolbyVision = true
+	job.RemoveDynamicHDR = RemoveDolbyVision
+	job.VideoStream = VideoStream{
+		Index:                        0,
+		Codec:                        "hevc",
+		NalLengthSize:                "4",
+		DolbyVisionProfile:           7,
+		RPUFlag:                      1,
+		BLPresentFlag:                1,
+		DolbyVisionBLCompatibilityID: 6,
+	}
+	caps := progressiveTestCapabilities()
+	caps.BSFOptions = []string{"hevc_metadata=remove_dovi"}
+
+	args, err := BuildHLSArgs(job, caps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := argumentValue(t, args, "-tag:v:0"); got != "hvc1" {
+		t.Fatalf("tag = %q, want hvc1", got)
+	}
+	if got := countArgument(args, "-strict"); got != 0 {
+		t.Fatalf("argv has %d -strict flags, want 0: %q", got, args)
+	}
+	if got := argumentValue(t, args, "-bsf:v"); got != "hevc_mp4toannexb,hevc_metadata=remove_dovi=1" {
+		t.Fatalf("-bsf:v = %q", got)
+	}
+}

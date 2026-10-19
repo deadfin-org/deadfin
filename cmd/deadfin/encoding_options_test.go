@@ -44,13 +44,14 @@ func TestHardwareOptionsProjectsEncodingXMLAndClearsMissingRenderNodes(t *testin
 
 func TestEncodingCapabilitiesProjectsHardwareProbe(t *testing.T) {
 	got := encodingCapabilities(ffmpeg.Capabilities{
-		Version:  ffmpeg.Version{Major: 8, Minor: 1, Patch: 1},
-		Encoders: []string{"h264_qsv", "libx264"},
-		Decoders: []string{"hevc_qsv"},
-		Filters:  []string{"tonemap_vaapi", "tonemapx"},
-		HWAccels: []string{"qsv", "vaapi"},
+		Version:    ffmpeg.Version{Major: 8, Minor: 1, Patch: 1},
+		Encoders:   []string{"h264_qsv", "libx264"},
+		Decoders:   []string{"hevc_qsv"},
+		Filters:    []string{"tonemap_vaapi", "tonemapx"},
+		HWAccels:   []string{"qsv", "vaapi"},
+		BSFOptions: []string{"dovi_rpu=strip", "hevc_metadata=remove_dovi"},
 	}, ffmpeg.NvidiaCapabilities{})
-	if !got.SupportsTonemapX || got.H264Encoder != "libx264" || got.EncoderMinorVersion != 1 || got.EncoderPatchVersion != 1 ||
+	if !got.SupportsTonemapX || !got.SupportsBSFOption("hevc_metadata=remove_dovi") || got.H264Encoder != "libx264" || got.EncoderMinorVersion != 1 || got.EncoderPatchVersion != 1 ||
 		!reflect.DeepEqual(got.HWAccels, []string{"qsv", "vaapi"}) || !reflect.DeepEqual(got.Encoders, []string{"h264_qsv", "libx264"}) {
 		t.Fatalf("encodingCapabilities = %#v", got)
 	}

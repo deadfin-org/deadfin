@@ -1614,6 +1614,7 @@ func encodingCapabilities(probed ffmpeg.Capabilities, nvidia ffmpeg.NvidiaCapabi
 		SupportsPKeyPause:              probed.PKeyPause,
 		Decoders:                       append([]string(nil), probed.Decoders...),
 		Filters:                        append([]string(nil), probed.Filters...),
+		BSFOptions:                     append([]string(nil), probed.BSFOptions...),
 	}
 	for _, name := range probed.Encoders {
 		if !strings.HasSuffix(name, "_nvenc") || containsCapability(nvidia.Encoders, name) {

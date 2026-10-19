@@ -1140,3 +1140,26 @@ func reapPIDFiles(paths ...string) {
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
 }
+
+// EncoderValidator.CheckBitStreamFilterWithOption (EncoderValidator.cs:517-543)
+// reads "-h bsf=<filter>". The help must name the filter and list the option.
+func TestProbeCapabilitiesDetectsBitStreamFilterOptions(t *testing.T) {
+	path := writeFakeFFmpegBody(t, `case "$2" in
+-version) printf '%s\n' "$FFMPEG_VERSION" ;;
+-bsfs) printf 'Bitstream filters:\nav1_metadata\ndovi_rpu\nhevc_metadata\n' ;;
+-h) case "$3" in
+  bsf=hevc_metadata) printf 'Bit stream filter hevc_metadata\n  -remove_dovi       <boolean>\n  -remove_hdr10plus  <boolean>\n' ;;
+  bsf=dovi_rpu) printf 'Bit stream filter dovi_rpu\n  -strip             <boolean>\n' ;;
+  *) printf 'Unknown bitstream filter\n'; exit 1 ;;
+  esac ;;
+*) exit 0 ;;
+esac`)
+	t.Setenv("FFMPEG_VERSION", qualifyingFFmpegVersion())
+	caps, err := ProbeCapabilitiesWithOptions(context.Background(), path, CapabilityOptions{Timeout: fixtureTimeout, MaxOutput: 4096})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := caps.BSFOptions, []string{"hevc_metadata=remove_dovi", "hevc_metadata=remove_hdr10plus", "dovi_rpu=strip"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("bsf options = %#v, want %#v", got, want)
+	}
+}

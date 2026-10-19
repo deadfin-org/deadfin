@@ -391,7 +391,9 @@ func TestHLSServiceMasterCopiesDolbyBaseLayersForMatchingRequestedRanges(t *test
 	}{
 		{name: "HDR10 base layer", compatibility: 1, requestedRange: "HDR10", wantVideoRange: "VIDEO-RANGE=PQ"},
 		{name: "HLG base layer", compatibility: 4, requestedRange: "HLG", wantVideoRange: "VIDEO-RANGE=HLG"},
-		{name: "SDR base layer", compatibility: 2, requestedRange: "SDR", wantVideoRange: "VIDEO-RANGE=SDR"},
+		// An SDR-only list copies no Dolby Vision source, not even an SDR
+		// base layer (EncodingHelper.cs:2484-2488).
+		{name: "SDR base layer", compatibility: 2, requestedRange: "SDR,HLG", wantVideoRange: "VIDEO-RANGE=SDR"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			source := progressiveCopySource("/media/dolby-base-layer-feature.mkv")
@@ -473,6 +475,121 @@ func TestHLSServiceCopiesDolbyEnhancementLayerAsHVC1(t *testing.T) {
 			}
 			if got := hlsArgPair(args, "-strict", "-2"); got != test.wantStrict {
 				t.Fatalf("HLS argv = %q, -strict -2 = %t, want %t", args, got, test.wantStrict)
+			}
+		})
+	}
+}
+
+// TestHLSServiceCopiesDolbyEnhancementLayerAsHDR10 pins deadfin#586: a
+// client that lists HDR10 but not DOVIWithEL gets a profile 7 copy with the
+// Dolby Vision RPU and enhancement layer removed, as an hvc1 PQ variant
+// (EncodingHelper.cs:1436-1437, 2507-2520). Without a removal filter in
+// ffmpeg the copy is refused (EncodingHelper.cs:1468-1479).
+func TestHLSServiceCopiesDolbyEnhancementLayerAsHDR10(t *testing.T) {
+	// SharkParty AVPlayer hevc-rangetype without the profile 7 entries.
+	const hdr10Ranges = "SDR,DOVIWithSDR,HLG,DOVIWithHLG,HDR10,HDR10Plus,DOVIWithHDR10,DOVIWithHDR10Plus,DOVI"
+	for _, test := range []struct {
+		name       string
+		options    []string
+		hdr10Plus  bool
+		wantCopy   bool
+		wantFilter string
+	}{
+		{name: "hevc_metadata", options: []string{"dovi_rpu=strip", "hevc_metadata=remove_dovi"}, wantCopy: true, wantFilter: "hevc_mp4toannexb,hevc_metadata=remove_dovi=1"},
+		{name: "dovi_rpu", options: []string{"dovi_rpu=strip"}, wantCopy: true, wantFilter: "hevc_mp4toannexb,dovi_rpu=strip=1"},
+		{name: "HDR10+ keeps HDR10+", options: []string{"hevc_metadata=remove_dovi"}, hdr10Plus: true, wantCopy: true, wantFilter: "hevc_mp4toannexb,hevc_metadata=remove_dovi=1"},
+		{name: "no removal filter", wantCopy: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := progressiveCopySource("/media/dolby-enhancement-layer-hdr10.mkv")
+			video := &source.MediaStreams[0]
+			video.Codec = "hevc"
+			profileName, bitDepth, transfer := "Main 10", 10, "smpte2084"
+			profile, level, rpu, base, compatibility := 7, 6, 1, 1, 6
+			video.Profile, video.BitDepth, video.ColorTransfer = &profileName, &bitDepth, &transfer
+			video.DvProfile, video.DvLevel = &profile, &level
+			video.RpuPresentFlag, video.BlPresentFlag, video.DvBlSignalCompatibilityID = &rpu, &base, &compatibility
+			video.Hdr10PlusPresentFlag = &test.hdr10Plus
+			videoLevel := float64(153)
+			video.Level = &videoLevel
+			nal := "4"
+			video.NalLengthSize = &nal
+
+			request := hlsMasterCopyRequest("hevc")
+			request.VideoCodec, request.VideoCodecs = "hevc,h264", []string{"hevc", "h264"}
+			request.StreamOptions = playback.NewStreamOptions()
+			request.StreamOptions.Set("hevc-rangetype", hdr10Ranges)
+			manager := &hlsFakeManager{segment: "segment"}
+			config := hlsServiceConfig(&progressiveFakeSource{source: source}, manager)
+			config.Capabilities.BSFOptions = test.options
+			service := playback.NewHLSService(config)
+			master, err := service.Master(t.Context(), request)
+			if err != nil {
+				t.Fatalf("Master(): %v", err)
+			}
+			playlist := readHLSResponse(t, master)
+			gotCopy := strings.Contains(playlist, `CODECS="hvc1.2.4.L153.B0`) && strings.Contains(playlist, "VIDEO-RANGE=PQ")
+			if gotCopy != test.wantCopy || strings.Contains(playlist, "dvh1") {
+				t.Fatalf("Master() playlist = %q, want hvc1 PQ copy = %t and no dvh1", playlist, test.wantCopy)
+			}
+			if gotHDR10Plus := strings.Contains(playlist, "/cdm4"); gotHDR10Plus != (test.wantCopy && test.hdr10Plus) {
+				t.Fatalf("Master() playlist = %q, HDR10+ supplemental codec = %t", playlist, gotHDR10Plus)
+			}
+
+			request.SegmentIndex = 0
+			if _, err := service.Segment(t.Context(), request); err != nil {
+				t.Fatalf("Segment(0): %v", err)
+			}
+			args := manager.lastRestart.Args
+			if got := hlsArgPair(args, "-codec:v:0", "copy"); got != test.wantCopy {
+				t.Fatalf("HLS argv = %q, video copy = %t, want %t", args, got, test.wantCopy)
+			}
+			if !test.wantCopy {
+				return
+			}
+			if !hlsArgPair(args, "-tag:v:0", "hvc1") || !hlsArgPair(args, "-bsf:v", test.wantFilter) || hlsArgPair(args, "-strict", "-2") {
+				t.Fatalf("HLS argv = %q, want hvc1 copy with -bsf:v %s and no -strict -2", args, test.wantFilter)
+			}
+		})
+	}
+}
+
+// A profile 8.1 HDR10+ copy for a client that lists DOVI strips HDR10+
+// (EncodingHelper.cs:1463-1465) when ffmpeg has the filter, and stays a
+// plain copy when it does not.
+func TestHLSServiceStripsHDR10PlusForDolbyVisionClientWhenSupported(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		options    []string
+		wantFilter string
+	}{
+		{name: "filter", options: []string{"hevc_metadata=remove_hdr10plus"}, wantFilter: "hevc_mp4toannexb,hevc_metadata=remove_hdr10plus=1"},
+		{name: "no filter", wantFilter: "hevc_mp4toannexb"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := progressiveCopySource("/media/dolby-hdr10plus-feature.mkv")
+			video := &source.MediaStreams[0]
+			video.Codec = "hevc"
+			profileName, bitDepth, transfer, hdr10Plus, nal := "Main 10", 10, "smpte2084", true, "4"
+			profile, level, rpu, base, compatibility := 8, 6, 1, 1, 1
+			video.Profile, video.BitDepth, video.ColorTransfer, video.Hdr10PlusPresentFlag, video.NalLengthSize = &profileName, &bitDepth, &transfer, &hdr10Plus, &nal
+			video.DvProfile, video.DvLevel = &profile, &level
+			video.RpuPresentFlag, video.BlPresentFlag, video.DvBlSignalCompatibilityID = &rpu, &base, &compatibility
+
+			request := hlsMasterCopyRequest("hevc")
+			request.StreamOptions = playback.NewStreamOptions()
+			request.StreamOptions.Set("hevc-rangetype", "HDR10,DOVIWithHDR10Plus,DOVI")
+			manager := &hlsFakeManager{segment: "segment"}
+			config := hlsServiceConfig(&progressiveFakeSource{source: source}, manager)
+			config.Capabilities.BSFOptions = test.options
+			service := playback.NewHLSService(config)
+			request.SegmentIndex = 0
+			if _, err := service.Segment(t.Context(), request); err != nil {
+				t.Fatalf("Segment(0): %v", err)
+			}
+			args := manager.lastRestart.Args
+			if !hlsArgPair(args, "-codec:v:0", "copy") || !hlsArgPair(args, "-bsf:v", test.wantFilter) {
+				t.Fatalf("HLS argv = %q, want copy with -bsf:v %s", args, test.wantFilter)
 			}
 		})
 	}

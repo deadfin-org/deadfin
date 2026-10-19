@@ -5,6 +5,7 @@ package encoding
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -142,6 +143,15 @@ type Capabilities struct {
 	// (MediaEncoder.cs:236). The transcode throttler pauses ffmpeg with "p"
 	// when it is true and with "c" otherwise.
 	SupportsPKeyPause bool
+	// BSFOptions lists the supported bitstream filter options as
+	// "filter=option" (MediaEncoder.SupportsBitStreamFilterWithOption).
+	BSFOptions []string
+}
+
+// SupportsBSFOption reports whether ffmpeg supports the bitstream filter
+// option, given as "filter=option", for example "dovi_rpu=strip".
+func (caps Capabilities) SupportsBSFOption(option string) bool {
+	return slices.Contains(caps.BSFOptions, option)
 }
 
 // BuildProgressiveArgs builds logical ffmpeg argv tokens for a progressive video

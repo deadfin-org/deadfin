@@ -577,14 +577,14 @@ func (service *HLSService) prepareHLS(ctx context.Context, request HLSRequest, k
 	if err != nil {
 		return preparedHLS{}, err
 	}
-	request = resolvedHLSRequest(request, source, video)
+	capabilities := service.currentCapabilities()
+	request = resolvedHLSRequest(request, source, video, capabilities)
 	var hardware encoding.HardwareOptions
 	if service.hardware != nil && !request.AudioOnly {
 		hardware = service.hardware()
 	}
-	capabilities := service.currentCapabilities()
 	videoCodec := hlsTranscodeVideoCodec(request.VideoCodecs, capabilities, hardware)
-	if err := validateHLSTargetCodecs(source, video, audio, request, videoCodec); err != nil {
+	if err := validateHLSTargetCodecs(source, video, audio, request, videoCodec, capabilities); err != nil {
 		return preparedHLS{}, err
 	}
 	var subtitle *MediaStream
@@ -595,7 +595,7 @@ func (service *HLSService) prepareHLS(ctx context.Context, request HLSRequest, k
 		}
 	}
 
-	job := hlsEncodingJob(source, video, audio, subtitle, hlsRenditionIdentityOutputPath, request, videoCodec)
+	job := hlsEncodingJob(source, video, audio, subtitle, hlsRenditionIdentityOutputPath, request, videoCodec, capabilities)
 	job.Hardware = hardware
 	service.padLateAudio(ctx, source, audio, request, &job)
 	service.useSubtitleCaches(ctx, source, subtitle, &job)
@@ -841,12 +841,12 @@ func validateHLSRequest(request HLSRequest) error {
 	return nil
 }
 
-func resolvedHLSRequest(request HLSRequest, source MediaSourceInfo, video *MediaStream) HLSRequest {
+func resolvedHLSRequest(request HLSRequest, source MediaSourceInfo, video *MediaStream, caps encoding.Capabilities) HLSRequest {
 	if request.SegmentContainer == "" {
 		request.SegmentContainer = "ts"
 	}
 	if !request.SegmentLengthSet && request.SegmentLengthSeconds == 0 {
-		if !request.Live && !request.AudioOnly && canCopyHLSVideo(source, video, request.ProgressiveRequest) {
+		if !request.Live && !request.AudioOnly && canCopyHLSVideo(source, video, request.ProgressiveRequest, caps) {
 			request.SegmentLengthSeconds = 6
 		} else {
 			request.SegmentLengthSeconds = 3
@@ -992,7 +992,7 @@ func hlsSubtitleStream(source MediaSourceInfo, request HLSRequest) (*MediaStream
 
 // hlsEncodingJob builds the HLS job. videoCodec is the transcode output
 // codec from hlsTranscodeVideoCodec; a copyable source copies instead.
-func hlsEncodingJob(source MediaSourceInfo, video, audio, subtitle *MediaStream, outputPath string, request HLSRequest, videoCodec string) encoding.HLSJob {
+func hlsEncodingJob(source MediaSourceInfo, video, audio, subtitle *MediaStream, outputPath string, request HLSRequest, videoCodec string, caps encoding.Capabilities) encoding.HLSJob {
 	var job encoding.EncodingJob
 	if request.AudioOnly {
 		job = hlsAudioEncodingJob(source, audio, outputPath, request)
@@ -1005,7 +1005,7 @@ func hlsEncodingJob(source MediaSourceInfo, video, audio, subtitle *MediaStream,
 		// The pinned caller computes the bitrate before the stream-copy
 		// decision, with the requested codec (StreamingHelpers.cs:208-211).
 		job.OutputVideoBitrate = hlsOutputVideoBitrate(video, request.ProgressiveRequest, job.OutputVideoCodec)
-		if canCopyHLSVideo(source, video, request.ProgressiveRequest) {
+		if canCopyHLSVideo(source, video, request.ProgressiveRequest, caps) {
 			job.OutputVideoCodec = "copy"
 		}
 		switch job.OutputVideoCodec {
@@ -1065,12 +1065,24 @@ func hlsEncodingJob(source MediaSourceInfo, video, audio, subtitle *MediaStream,
 			job.DownmixAudioBoost = boost
 		}
 	}
+	copyVideo := !request.AudioOnly && job.OutputVideoCodec == "copy"
+	removal := encoding.RemoveNoDynamicHDR
+	if copyVideo {
+		removal = dynamicHDRRemoval(video, progressiveVideoRangeTypes(request.ProgressiveRequest, strings.ToLower(video.Codec)))
+		// A copy whose range the client lists does not need the removal.
+		// Without the ffmpeg filter it stays a plain copy; upstream adds the
+		// filter unconditionally and ffmpeg fails.
+		if !canRemoveDynamicHDR(removal, video, caps) {
+			removal = encoding.RemoveNoDynamicHDR
+		}
+	}
 	return encoding.HLSJob{
 		EncodingJob:          job,
 		SegmentLengthSeconds: request.SegmentLengthSeconds,
 		StartNumber:          0,
 		RunTimeTicks:         int64PointerValue(source.RunTimeTicks),
-		DirectDolbyVision:    !request.AudioOnly && job.OutputVideoCodec == "copy" && hlsDOVISource(video) && !hlsDOVIEnhancementLayer(video) && hlsDOVIRequested(video, request),
+		DirectDolbyVision:    copyVideo && hlsDOVISource(video) && !hlsDOVIEnhancementLayer(video) && hlsDOVIRequested(video, request) && removal != encoding.RemoveDolbyVision,
+		RemoveDynamicHDR:     removal,
 	}
 }
 
@@ -1228,14 +1240,14 @@ func hlsAudioEncodingJob(source MediaSourceInfo, audio *MediaStream, outputPath 
 // canCopyHLSVideo retains ProgressiveService's full copy constraints while
 // allowing an HLS-negotiated source codec such as VP9 in place of its H.264
 // transport-specific codec check.
-func canCopyHLSVideo(source MediaSourceInfo, video *MediaStream, request ProgressiveRequest) bool {
+func canCopyHLSVideo(source MediaSourceInfo, video *MediaStream, request ProgressiveRequest, caps encoding.Capabilities) bool {
 	if video == nil || !request.AllowVideoStreamCopy || !containsProgressiveCodec(request.VideoCodecs, video.Codec) {
 		return false
 	}
 	if video.VideoRangeType() == VideoRangeDOVI && !hlsDOVIRequested(video, HLSRequest{ProgressiveRequest: request}) {
 		return false
 	}
-	return canCopyVideoForCodec(source, video, request, strings.ToLower(video.Codec))
+	return canCopyVideoForCodec(source, video, request, strings.ToLower(video.Codec), caps)
 }
 
 // canCopyHLSAudio ports EncodingHelper.CanStreamCopyAudio
@@ -1350,8 +1362,8 @@ func hlsHardwareOutputConstraints(codec string, request ProgressiveRequest) (str
 // validateHLSTargetCodecs rejects a request that Deadfin's encoder cannot
 // satisfy. When the source audio cannot be copied, Deadfin encodes AAC only
 // (D-50), so the requested audio codec list must include AAC.
-func validateHLSTargetCodecs(source MediaSourceInfo, video, audio *MediaStream, request HLSRequest, videoCodec string) error {
-	if !request.AudioOnly && !canCopyHLSVideo(source, video, request.ProgressiveRequest) && videoCodec == "" {
+func validateHLSTargetCodecs(source MediaSourceInfo, video, audio *MediaStream, request HLSRequest, videoCodec string, caps encoding.Capabilities) error {
+	if !request.AudioOnly && !canCopyHLSVideo(source, video, request.ProgressiveRequest, caps) && videoCodec == "" {
 		return fmt.Errorf("%w: HLS encoder cannot satisfy requested video codecs", ErrProgressiveUnsupported)
 	}
 	if !canCopyHLSAudio(audio, request.ProgressiveRequest) && len(request.AudioCodecs) != 0 && !containsProgressiveCodec(request.AudioCodecs, "aac") {
@@ -1625,7 +1637,7 @@ func (prepared preparedHLS) masterVariant() hls.MasterVariant {
 			BitDepth:    intPointerValue(prepared.video.BitDepth),
 			PixelFormat: stringPointerValue(prepared.video.PixelFormat),
 			Range:       hlsVideoRange(prepared.video),
-			HDR10Plus:   boolPointerValue(prepared.video.Hdr10PlusPresentFlag),
+			HDR10Plus:   boolPointerValue(prepared.video.Hdr10PlusPresentFlag) && prepared.job.RemoveDynamicHDR != encoding.RemoveHDR10Plus,
 			DolbyVision: hlsDolbyVision(prepared.video, prepared.request, true),
 		}
 	} else {

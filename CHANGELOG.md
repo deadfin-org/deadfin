@@ -79,6 +79,15 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- HLS copies a Dolby Vision profile 7 (dual-layer) HEVC stream as HDR10 for a
+  client that lists `HDR10` but not `DOVIWithEL` in its range types. The copy
+  removes the RPU and the enhancement layer with `hevc_metadata=remove_dovi`
+  (or `dovi_rpu=strip`) and the master playlist offers an `hvc1` variant with
+  `VIDEO-RANGE=PQ`, as upstream does. Before, such a client got a 4K SDR
+  H.264 tone-mapped transcode. Startup probes which removal filters ffmpeg
+  has. The same port strips HDR10+ from a profile 8.1 HDR10+ copy for a
+  Dolby Vision client, and Dolby Vision from an invalid configuration (#586,
+  D-84).
 - `import-jellyfin` reads a Jellyfin database in WAL mode from the read-only
   `/import` mount that the import guide uses. The importer opens the stopped
   copy immutable, so SQLite creates no `jellyfin.db-shm` next to it. A

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -165,7 +166,7 @@ func (service *ProgressiveService) OpenProgressive(ctx context.Context, request 
 	if err != nil {
 		return ProgressiveResponse{}, err
 	}
-	if !canCopyVideo(source, video, request) || !canCopyAudio(audio, request) {
+	if !canCopyVideo(source, video, request, service.currentCapabilities()) || !canCopyAudio(audio, request) {
 		return ProgressiveResponse{}, ErrProgressiveUnsupported
 	}
 	if !hasCanonicalSourceAuthority(source) {
@@ -293,21 +294,21 @@ func progressiveDiscSource(source MediaSourceInfo) bool {
 	return *source.VideoType == VideoTypeIso || *source.VideoType == VideoTypeDVD || *source.VideoType == VideoTypeBluRay || *source.VideoType == VideoTypeHDVD
 }
 
-func canCopyVideo(source MediaSourceInfo, video *MediaStream, request ProgressiveRequest) bool {
+func canCopyVideo(source MediaSourceInfo, video *MediaStream, request ProgressiveRequest, caps encoding.Capabilities) bool {
 	if video == nil || !request.AllowVideoStreamCopy || !strings.EqualFold(video.Codec, "h264") || !containsProgressiveCodec(request.VideoCodecs, video.Codec) {
 		return false
 	}
-	return canCopyVideoForCodecWithLevel(source, video, request, "h264", progressiveH264VideoLevel(request, "h264"))
+	return canCopyVideoForCodecWithLevel(source, video, request, "h264", progressiveH264VideoLevel(request, "h264"), caps)
 }
 
 // canCopyVideoForCodec applies video stream-copy constraints whose stream
 // options are qualified by the actual source codec. Callers retain ownership
 // of codec/container eligibility before entering this shared predicate.
-func canCopyVideoForCodec(source MediaSourceInfo, video *MediaStream, request ProgressiveRequest, qualifier string) bool {
-	return canCopyVideoForCodecWithLevel(source, video, request, qualifier, progressiveVideoLevel(request, qualifier))
+func canCopyVideoForCodec(source MediaSourceInfo, video *MediaStream, request ProgressiveRequest, qualifier string, caps encoding.Capabilities) bool {
+	return canCopyVideoForCodecWithLevel(source, video, request, qualifier, progressiveVideoLevel(request, qualifier), caps)
 }
 
-func canCopyVideoForCodecWithLevel(source MediaSourceInfo, video *MediaStream, request ProgressiveRequest, qualifier string, requestedLevel *float64) bool {
+func canCopyVideoForCodecWithLevel(source MediaSourceInfo, video *MediaStream, request ProgressiveRequest, qualifier string, requestedLevel *float64, caps encoding.Capabilities) bool {
 	if video == nil {
 		return false
 	}
@@ -338,7 +339,7 @@ func canCopyVideoForCodecWithLevel(source MediaSourceInfo, video *MediaStream, r
 	if request.VideoBitrate != nil && (video.BitRate == nil || *video.BitRate > *request.VideoBitrate) {
 		return false
 	}
-	if !progressiveProfileSupported(video.Profile, progressiveVideoProfile(request, qualifier)) || progressiveExceedsFloat(video.Level, requestedLevel) || progressiveExceedsInt(video.RefFrames, progressiveVideoRefFrames(request, qualifier)) || progressiveExceedsInt(video.BitDepth, progressiveVideoBitDepth(request, qualifier)) || !progressiveRangeTypeSupported(video.VideoRangeType(), progressiveVideoRangeTypes(request, qualifier)) || !progressiveRotationSupported(video.Rotation, progressiveVideoRotation(request, qualifier)) {
+	if !progressiveProfileSupported(video.Profile, progressiveVideoProfile(request, qualifier)) || progressiveExceedsFloat(video.Level, requestedLevel) || progressiveExceedsInt(video.RefFrames, progressiveVideoRefFrames(request, qualifier)) || progressiveExceedsInt(video.BitDepth, progressiveVideoBitDepth(request, qualifier)) || !progressiveRangeTypeSupported(video, progressiveVideoRangeTypes(request, qualifier), caps) || !progressiveRotationSupported(video.Rotation, progressiveVideoRotation(request, qualifier)) {
 		return false
 	}
 	if strings.EqualFold(source.Container, "avi") && strings.EqualFold(video.Codec, "h264") && (video.IsAVC == nil || !*video.IsAVC) {
@@ -489,36 +490,108 @@ func progressiveVideoOption(request ProgressiveRequest, qualifier, name string) 
 	return request.StreamOptions.Get(name)
 }
 
-func progressiveRangeTypeSupported(source VideoRangeType, requested string) bool {
-	if requested == "" {
+// progressiveRangeTypeSupported ports the range-type part of
+// EncodingHelper.CanStreamCopyVideo (EncodingHelper.cs:2470-2524). A Dolby
+// Vision or HDR10+ source that the client range types do not name can still
+// copy when ffmpeg removes the dynamic metadata that the client cannot use.
+func progressiveRangeTypeSupported(video *MediaStream, requested string, caps encoding.Capabilities) bool {
+	requestedTypes := splitRangeTypes(requested)
+	if len(requestedTypes) == 0 {
 		return true
 	}
-	var supported []VideoRangeType
-	for _, candidate := range strings.FieldsFunc(requested, func(r rune) bool { return r == ',' || r == '|' }) {
-		if rangeType, ok := ParseVideoRangeType(strings.TrimSpace(candidate)); ok {
-			supported = append(supported, rangeType)
-			if rangeType == source {
-				return true
-			}
-		}
-	}
-	if len(supported) == 0 {
+	source := video.VideoRangeType()
+	if source == VideoRangeUnknown {
 		return false
 	}
-	if source == VideoRangeSDR {
+	has := func(rangeType VideoRangeType) bool { return slices.Contains(requestedTypes, rangeType.String()) }
+	requestHasHDR10, requestHasHLG, requestHasSDR, requestHasDOVI := has(VideoRangeHDR10), has(VideoRangeHLG), has(VideoRangeSDR), has(VideoRangeDOVI)
+	if len(requestedTypes) == 1 && requestHasSDR && source != VideoRangeSDR {
+		return false
+	}
+	if !requestHasDOVI && source == VideoRangeDOVI {
+		return false
+	}
+	if has(source) ||
+		(requestHasHDR10 && source == VideoRangeDOVIWithHDR10) ||
+		(requestHasHLG && source == VideoRangeDOVIWithHLG) ||
+		(requestHasSDR && source == VideoRangeDOVIWithSDR) ||
+		(requestHasHDR10 && source == VideoRangeHDR10Plus) {
 		return true
 	}
-	for _, rangeType := range supported {
-		switch {
-		case rangeType == VideoRangeHDR10 && (source == VideoRangeDOVIWithHDR10 || source == VideoRangeHDR10Plus):
-			return true
-		case rangeType == VideoRangeHLG && source == VideoRangeDOVIWithHLG:
-			return true
-		case rangeType == VideoRangeSDR && source == VideoRangeDOVIWithSDR:
-			return true
+	switch source {
+	case VideoRangeHDR10Plus, VideoRangeHDR10, VideoRangeHLG:
+		return false
+	}
+	return canRemoveDynamicHDR(dynamicHDRRemoval(video, requested), video, caps)
+}
+
+// splitRangeTypes splits a requested range-type list as
+// EncodingJobInfo.GetRequestedRangeTypes does (EncodingJobInfo.cs:593-603).
+// The names compare without case; each is returned in its canonical form
+// when it parses.
+func splitRangeTypes(requested string) []string {
+	var result []string
+	for _, candidate := range strings.FieldsFunc(requested, func(r rune) bool { return r == ',' || r == '|' }) {
+		candidate = strings.TrimSpace(candidate)
+		if parsed, ok := ParseVideoRangeType(candidate); ok {
+			candidate = parsed.String()
+		}
+		if candidate != "" {
+			result = append(result, candidate)
 		}
 	}
-	return false
+	return result
+}
+
+// dynamicHDRRemoval ports EncodingHelper.ShouldRemoveDynamicHdrMetadata
+// (EncodingHelper.cs:1411-1466). requested is the client range-type list for
+// the source codec.
+func dynamicHDRRemoval(video *MediaStream, requested string) encoding.DynamicHDRRemoval {
+	if video == nil || video.VideoRange() != MediaVideoRangeHDR {
+		return encoding.RemoveNoDynamicHDR
+	}
+	requestedTypes := splitRangeTypes(requested)
+	if len(requestedTypes) == 0 {
+		return encoding.RemoveNoDynamicHDR
+	}
+	has := func(rangeType VideoRangeType) bool { return slices.Contains(requestedTypes, rangeType.String()) }
+	source := video.VideoRangeType()
+	// Case 1: the client plays HDR10 but not Dolby Vision with an
+	// enhancement layer. Case 2: a Dolby Vision client and an invalid Dolby
+	// Vision configuration.
+	removeDOVI := (!has(VideoRangeDOVIWithEL) && has(VideoRangeHDR10) && source == VideoRangeDOVIWithEL) ||
+		(has(VideoRangeDOVI) && source == VideoRangeDOVIInvalid)
+	removeHDR10Plus := false
+	if source == VideoRangeDOVIWithELHDR10Plus {
+		removeHDR10Plus = has(VideoRangeDOVIWithEL) && !has(VideoRangeDOVIWithELHDR10Plus)
+		removeDOVI = removeDOVI || !removeHDR10Plus
+	}
+	if removeDOVI {
+		return encoding.RemoveDolbyVision
+	}
+	if removeHDR10Plus || (has(VideoRangeDOVI) && source == VideoRangeDOVIWithHDR10Plus) {
+		return encoding.RemoveHDR10Plus
+	}
+	return encoding.RemoveNoDynamicHDR
+}
+
+// canRemoveDynamicHDR ports EncodingHelper.CanEncoderRemoveDynamicHdrMetadata
+// (EncodingHelper.cs:1468-1479).
+func canRemoveDynamicHDR(removal encoding.DynamicHDRRemoval, video *MediaStream, caps encoding.Capabilities) bool {
+	codec := strings.ToLower(video.Codec)
+	hevc := strings.Contains(codec, "hevc") || strings.Contains(codec, "265")
+	av1 := strings.Contains(codec, "av1")
+	switch removal {
+	case encoding.RemoveDolbyVision:
+		return caps.SupportsBSFOption("dovi_rpu=strip") ||
+			(hevc && caps.SupportsBSFOption("hevc_metadata=remove_dovi")) ||
+			(av1 && caps.SupportsBSFOption("av1_metadata=remove_dovi"))
+	case encoding.RemoveHDR10Plus:
+		return (hevc && caps.SupportsBSFOption("hevc_metadata=remove_hdr10plus")) ||
+			(av1 && caps.SupportsBSFOption("av1_metadata=remove_hdr10plus"))
+	default:
+		return true
+	}
 }
 
 func progressiveVideoRotation(request ProgressiveRequest, qualifier string) string {
