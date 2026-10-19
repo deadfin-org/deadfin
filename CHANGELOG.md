@@ -79,6 +79,12 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- The library scan ignores Jellyfin trickplay directories, as Jellyfin does.
+  With "save trickplay with media" on, Jellyfin writes a
+  `<video>.trickplay/` directory next to each video. Deadfin indexed these
+  directories and their tile directories as Folder items that showed in
+  browse and search. The next scan removes Folder items that an earlier scan
+  made for them (#704).
 - HLS copies a Dolby Vision profile 7 (dual-layer) HEVC stream as HDR10 for a
   client that lists `HDR10` but not `DOVIWithEL` in its range types. The copy
   removes the RPU and the enhancement layer with `hevc_metadata=remove_dovi`

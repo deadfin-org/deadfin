@@ -1376,7 +1376,7 @@ func (s *Scanner) planSources(ctx context.Context, folder VirtualFolder, collect
 		}
 		rootFolders = append(rootFolders, *rootItem)
 
-		entries, err := s.options.ReadDir(path)
+		entries, err := s.readMediaDir(path)
 		if err != nil {
 			// An inaccessible root still enters the collection plan. The
 			// scanner cannot enumerate the directory, so no per-root
@@ -1893,7 +1893,7 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 	entries := append([]Entry(nil), task.entries...)
 	if !task.hasEntries {
 		var err error
-		entries, err = s.options.ReadDir(task.entry.Path)
+		entries, err = s.readMediaDir(task.entry.Path)
 		if err != nil {
 			return folderResolution{}, fmt.Errorf("enumerate folder: %w", err)
 		}
@@ -1916,7 +1916,7 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 		children, found := directoryChildren[key]
 		if !found {
 			var err error
-			children, err = s.options.ReadDir(entry.Path)
+			children, err = s.readMediaDir(entry.Path)
 			if err != nil {
 				continue
 			}
@@ -1931,7 +1931,7 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 			if _, found := directoryChildren[childKey]; found {
 				continue
 			}
-			grandchildren, err := s.options.ReadDir(child.Path)
+			grandchildren, err := s.readMediaDir(child.Path)
 			if err != nil {
 				continue
 			}
