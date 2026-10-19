@@ -24,6 +24,10 @@ func TestIsMultiDiscAlbum(t *testing.T) {
 		{"/Music/Album/CD1", true},
 		{"/Music/Album/Disc 2", true},
 		{"/Music/Album/part 1", true},
+		{"/Music/Beyoncé/I Am… Sasha Fierce (2008)/CD 01", true},
+		{"/Music/Jimmy Eat World/Futures (2004)/Digital Media 01", true},
+		{"/Music/Album/Disc 1", true},
+		{"/Music/Album/Digital Media", false},
 		{"Blah 04(Encores and Folk Songs)", false},
 	}
 	for _, tt := range tests {

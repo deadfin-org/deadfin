@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/deadfin-org/deadfin/internal/dto"
@@ -90,6 +91,7 @@ func (s *ItemStore) translateQuery(ctx context.Context, tx *sql.Tx, query ItemQu
 		query.recursiveParent = &recursiveParentFacts{kind: parent.kind, topParent: parent.topParent}
 		applyLinkedParentScope(&query, parent.kind)
 		applySeasonParentScope(&query, parent.kind)
+		applyMusicAlbumParentScope(&query, parent.kind)
 	}
 	translated, err := Translate(query, s.stores.Dialect())
 	return query, translated, err
@@ -190,6 +192,30 @@ func applySeasonParentScope(query *ItemQuery, parentKind string) {
 	query.ParentID = nil
 	query.Recursive = false
 	query.recursiveParent = nil
+}
+
+// applyMusicAlbumParentScope ports the MusicAlbum branch of
+// Folder.GetItemsInternal: a user's direct (non-recursive) query of a
+// MusicAlbum lists the album's tracks (Folder.AddChildren calls
+// MusicAlbum.GetEligibleChildrenForRecursiveChildren, which returns
+// Tracks, the recursive Audio children). The tracks of a multi-disc album
+// live in disc folders ("CD 01"), so a direct parent scope misses them.
+// DisplayAlbumFolders keeps the direct children. Without a user, upstream
+// keeps the base Folder scope. Explicit item IDs bypass GetItemsInternal.
+func applyMusicAlbumParentScope(query *ItemQuery, parentKind string) {
+	if parentKind != item.KindMusicAlbum.String() || query.Recursive || query.UserID == nil || query.UserID.IsNil() || len(query.ItemIDs) != 0 || query.DisplayAlbumFolders != nil && *query.DisplayAlbumFolders {
+		return
+	}
+	query.Recursive = true
+	if len(query.IncludeItemTypes) == 0 || slices.Contains(query.IncludeItemTypes, item.KindAudio) {
+		query.IncludeItemTypes = []item.Kind{item.KindAudio}
+		return
+	}
+	// The query filters only the tracks, so a type filter without Audio
+	// selects nothing. No Audio item is a folder.
+	query.IncludeItemTypes = []item.Kind{item.KindAudio}
+	isFolder := true
+	query.IsFolder = &isFolder
 }
 
 // ItemIDsByCleanName returns the IDs of items of the given kinds whose

@@ -79,6 +79,13 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- A multi-disc album is one album, as in Jellyfin. An album folder whose
+  tracks are in disc folders (`CD 01`, `Disc 1`, `Digital Media 01`, and the
+  other Jellyfin disc names) is the MusicAlbum, its parent folder is the
+  artist, and the disc folders are plain folders. The album lists the tracks
+  of every disc, its track count includes every disc, and each track shows
+  the album. Before, each disc folder was an album named after the folder,
+  with no album artist. A library scan replaces those albums (#703).
 - The library scan ignores Jellyfin trickplay directories, as Jellyfin does.
   With "save trickplay with media" on, Jellyfin writes a
   `<video>.trickplay/` directory next to each video. Deadfin indexed these

@@ -1884,6 +1884,22 @@ func (s *Scanner) scanFolder(ctx context.Context, task scanTask) scanOutcome {
 	return outcome
 }
 
+// readDirectoryChildren returns the cached listing of path, or reads,
+// normalizes, and caches it. A listing that cannot be read is empty.
+func (s *Scanner) readDirectoryChildren(directoryChildren map[string][]Entry, path string) []Entry {
+	key := normalizedEntryPath(path)
+	if children, found := directoryChildren[key]; found {
+		return children
+	}
+	children, err := s.readMediaDir(path)
+	if err != nil {
+		return nil
+	}
+	normalizeEntries(children)
+	directoryChildren[key] = children
+	return children
+}
+
 // resolveFolder resolves one directory's entries into a child plan without
 // reconciling. The caller reconciles the desired items under the parent
 // folder and enqueues the child tasks for recursion. Splitting resolution
@@ -1927,16 +1943,19 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 			if !child.IsDir {
 				continue
 			}
-			childKey := normalizedEntryPath(child.Path)
-			if _, found := directoryChildren[childKey]; found {
+			grandchildren := s.readDirectoryChildren(directoryChildren, child.Path)
+			// An artist folder is an artist when a child album holds its
+			// tracks in multi-disc subfolders (MusicArtistResolver calls
+			// MusicAlbumResolver.IsMusicAlbum on each child), so a music
+			// folder also needs the listings one level further down.
+			if task.collection != item.CollectionTypeMusic {
 				continue
 			}
-			grandchildren, err := s.readMediaDir(child.Path)
-			if err != nil {
-				continue
+			for _, grandchild := range grandchildren {
+				if grandchild.IsDir {
+					s.readDirectoryChildren(directoryChildren, grandchild.Path)
+				}
 			}
-			normalizeEntries(grandchildren)
-			directoryChildren[childKey] = grandchildren
 		}
 	}
 	contextInput := ResolveContext{Entry: task.entry, Children: entries, ChildEntries: directoryChildren, Parent: &task.folder, Ancestors: task.ancestors, CollectionType: task.collection, Options: task.options, LibraryRoot: task.libraryRoot}

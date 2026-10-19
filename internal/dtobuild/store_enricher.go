@@ -265,10 +265,13 @@ type relatedItemGraph struct {
 	albums  map[dto.UUID]item.Item
 	seasons map[dto.UUID]item.Item
 	series  map[dto.UUID]item.Item
+	// discFolders maps the ID of a Folder that is the parent of an Audio
+	// item to the Folder's own parent ID.
+	discFolders map[dto.UUID]dto.UUID
 }
 
 func (e storeEnricher) relatedItemGraph(ctx context.Context, values []item.Item) (relatedItemGraph, error) {
-	graph := relatedItemGraph{albums: map[dto.UUID]item.Item{}, seasons: map[dto.UUID]item.Item{}, series: map[dto.UUID]item.Item{}}
+	graph := relatedItemGraph{albums: map[dto.UUID]item.Item{}, seasons: map[dto.UUID]item.Item{}, series: map[dto.UUID]item.Item{}, discFolders: map[dto.UUID]dto.UUID{}}
 	ids := make([]dto.UUID, 0, len(values)*3)
 	seen := make(map[dto.UUID]struct{}, len(values)*3)
 	add := func(id *dto.UUID) {
@@ -291,10 +294,11 @@ func (e storeEnricher) relatedItemGraph(ctx context.Context, values []item.Item)
 	if len(ids) == 0 {
 		return graph, nil
 	}
-	result, err := e.items.Query(ctx, store.ItemQuery{ItemIDs: ids, IncludeItemTypes: []item.Kind{item.KindMusicAlbum, item.KindSeason, item.KindSeries}, EnableTotalRecordCount: false})
+	result, err := e.items.Query(ctx, store.ItemQuery{ItemIDs: ids, IncludeItemTypes: []item.Kind{item.KindMusicAlbum, item.KindSeason, item.KindSeries, item.KindFolder}, EnableTotalRecordCount: false})
 	if err != nil {
 		return relatedItemGraph{}, err
 	}
+	folderIDs := make([]dto.UUID, 0)
 	for _, value := range result.Items {
 		switch value.Kind {
 		case item.KindMusicAlbum:
@@ -303,9 +307,39 @@ func (e storeEnricher) relatedItemGraph(ctx context.Context, values []item.Item)
 			graph.seasons[value.ID] = value
 		case item.KindSeries:
 			graph.series[value.ID] = value
+		case item.KindFolder:
+			if value.ParentID != nil && !value.ParentID.IsNil() {
+				graph.discFolders[value.ID] = *value.ParentID
+				folderIDs = append(folderIDs, *value.ParentID)
+			}
 		}
 	}
+	if len(folderIDs) == 0 {
+		return graph, nil
+	}
+	// A track of a multi-disc album is a child of a disc folder ("CD 01")
+	// below the album, so its album is the folder's parent.
+	albums, err := e.items.Query(ctx, store.ItemQuery{ItemIDs: folderIDs, IncludeItemTypes: []item.Kind{item.KindMusicAlbum}, EnableTotalRecordCount: false})
+	if err != nil {
+		return relatedItemGraph{}, err
+	}
+	for _, value := range albums.Items {
+		graph.albums[value.ID] = value
+	}
 	return graph, nil
+}
+
+// album returns the MusicAlbum of an Audio item: its parent, or the parent
+// of its disc folder (Audio.AlbumEntity is FindParent<MusicAlbum>()).
+func (graph relatedItemGraph) album(parentID dto.UUID) (item.Item, bool) {
+	if related, found := graph.albums[parentID]; found {
+		return related, true
+	}
+	if albumID, found := graph.discFolders[parentID]; found {
+		related, found := graph.albums[albumID]
+		return related, found
+	}
+	return item.Item{}, false
 }
 
 type namedEntityGraph struct {
@@ -412,7 +446,7 @@ func applyRelatedProjection(enrichment *Enrichment, value item.Item, graph relat
 	}
 	if value.Kind == item.KindAudio {
 		if value.ParentID != nil {
-			if related, found := graph.albums[*value.ParentID]; found {
+			if related, found := graph.album(*value.ParentID); found {
 				id := related.ID
 				enrichment.AlbumID = &id
 				enrichment.Album = dereference(related.Name)

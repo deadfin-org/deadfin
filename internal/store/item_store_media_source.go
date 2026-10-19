@@ -822,7 +822,36 @@ func (s *ItemStore) dtoProjectionCounts(ctx context.Context, db queryer, ids []d
 	if err := closeRows(rows, rows.Err()); err != nil {
 		return err
 	}
-	return s.seasonEpisodeCounts(ctx, db, ids, out)
+	if err := s.seasonEpisodeCounts(ctx, db, ids, out); err != nil {
+		return err
+	}
+	return s.albumTrackCounts(ctx, db, ids, out)
+}
+
+// albumTrackCounts counts the tracks of each album in ids. A MusicAlbum's
+// children are its Tracks, the recursive Audio children
+// (MusicAlbum.GetEligibleChildrenForRecursiveChildren), so they are its
+// child and recursive counts. The tracks of a multi-disc album are in disc
+// folders, which are not counted. An album without tracks counts 0.
+func (s *ItemStore) albumTrackCounts(ctx context.Context, db queryer, ids []dto.UUID, out map[dto.UUID]int) error {
+	marks, args := s.sourceIDArgs(ids)
+	rows, err := db.QueryContext(ctx, "SELECT album.id,COUNT(track.id) FROM items AS album LEFT JOIN ancestors AS scope ON scope.ancestor_id = album.id LEFT JOIN items AS track ON track.id = scope.item_id AND track.kind = '"+item.KindAudio.String()+"' WHERE album.id IN ("+marks+") AND album.kind = '"+item.KindMusicAlbum.String()+"' GROUP BY album.id", args...)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var raw any
+		var count int
+		if err := rows.Scan(&raw, &count); err != nil {
+			return closeRows(rows, err)
+		}
+		id, err := scanUUID(raw)
+		if err != nil {
+			return closeRows(rows, err)
+		}
+		out[id] = count
+	}
+	return closeRows(rows, rows.Err())
 }
 
 // seasonEpisodeCounts counts the episodes of each season in ids. A season's

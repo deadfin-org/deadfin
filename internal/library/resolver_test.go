@@ -956,3 +956,67 @@ func TestSeasonResolverStripsSeriesFolderName(t *testing.T) {
 		})
 	}
 }
+
+// TestDefaultResolversTreatDiscFoldersAsPartOfTheAlbum ports
+// MusicAlbumResolver.ContainsMusic and the multi-disc skip of
+// MusicArtistResolver (#703). An album folder whose tracks are in disc
+// folders ("CD 01", "Disc 1", "Digital Media 01") is the album, and its
+// parent is the artist.
+func TestDefaultResolversTreatDiscFoldersAsPartOfTheAlbum(t *testing.T) {
+	chain := library.NewDefaultChain(naming.DefaultOptions())
+	parent := item.Item{ID: dto.UUID{0xf9}, Kind: item.KindFolder}
+	artistParent := item.Item{ID: dto.UUID{0xfa}, Kind: item.KindMusicArtist}
+	albumParent := item.Item{ID: dto.UUID{0xfb}, Kind: item.KindMusicAlbum}
+	const root = "/missing/music"
+	dir := func(path string) library.Entry { return library.Entry{Path: root + "/" + path, IsDir: true} }
+	file := func(path string) library.Entry { return library.Entry{Path: root + "/" + path, Size: 1} }
+	for _, discs := range [][]string{{"CD 01", "CD 02"}, {"Disc 1", "Disc 2"}, {"Digital Media 01", "Digital Media 02", "Digital Media 03"}, {"cd1"}, {"Disc 04 (Encores and Folk Songs)"}} {
+		album := "Artist/Album (2008)"
+		children := make([]library.Entry, 0, len(discs)+1)
+		childEntries := map[string][]library.Entry{}
+		for _, disc := range discs {
+			children = append(children, dir(album+"/"+disc))
+			childEntries[root+"/"+album+"/"+disc] = []library.Entry{file(album + "/" + disc + "/01 - Track.flac")}
+		}
+		children = append(children, file(album+"/cover.jpg"))
+		childEntries[root+"/"+album] = children
+		for _, tt := range []struct {
+			name  string
+			input library.ResolveContext
+			kind  item.Kind
+		}{
+			{"artist", library.ResolveContext{Entry: dir("Artist"), Parent: &parent, Children: []library.Entry{dir(album)}, ChildEntries: childEntries, CollectionType: item.CollectionTypeMusic}, item.KindMusicArtist},
+			{"album under artist", library.ResolveContext{Entry: dir(album), Parent: &artistParent, Children: children, ChildEntries: childEntries, CollectionType: item.CollectionTypeMusic}, item.KindMusicAlbum},
+			{"album without artist", library.ResolveContext{Entry: dir(album), Parent: &parent, Children: children, ChildEntries: childEntries, CollectionType: item.CollectionTypeMusic}, item.KindMusicAlbum},
+			{"disc folder", library.ResolveContext{Entry: children[0], Parent: &albumParent, Children: childEntries[children[0].Path], ChildEntries: childEntries, CollectionType: item.CollectionTypeMusic}, item.KindFolder},
+		} {
+			t.Run(discs[0]+"/"+tt.name, func(t *testing.T) {
+				got, err := chain.Resolve(t.Context(), tt.input)
+				if err != nil {
+					t.Fatalf("Resolve(%s) error = %v", tt.input.Entry.Path, err)
+				}
+				if got == nil || got.Kind != tt.kind {
+					t.Fatalf("Resolve(%s) = %#v, want %s", tt.input.Entry.Path, got, tt.kind)
+				}
+			})
+		}
+	}
+
+	// A subfolder with music that is not a disc folder makes the folder a
+	// collection of albums, not a multi-disc album (ContainsMusic stops).
+	mixed := map[string][]library.Entry{
+		root + "/Compilations/Best Of/CD 01": {file("Compilations/Best Of/CD 01/01 - Track.flac")},
+		root + "/Compilations/Best Of/Live":  {file("Compilations/Best Of/Live/01 - Track.flac")},
+	}
+	mixedChildren := []library.Entry{dir("Compilations/Best Of/CD 01"), dir("Compilations/Best Of/Live")}
+	got, err := chain.Resolve(t.Context(), library.ResolveContext{Entry: dir("Compilations/Best Of"), Parent: &artistParent, Children: mixedChildren, ChildEntries: mixed, CollectionType: item.CollectionTypeMusic})
+	if err != nil || got == nil || got.Kind != item.KindFolder {
+		t.Fatalf("Resolve(disc and non-disc subfolders under an artist) = %#v, %v; want Folder", got, err)
+	}
+	// An empty disc folder holds no music.
+	empty := map[string][]library.Entry{root + "/Artist/Empty/CD 01": nil}
+	got, err = chain.Resolve(t.Context(), library.ResolveContext{Entry: dir("Artist/Empty"), Parent: &artistParent, Children: []library.Entry{dir("Artist/Empty/CD 01")}, ChildEntries: empty, CollectionType: item.CollectionTypeMusic})
+	if err != nil || got == nil || got.Kind != item.KindFolder {
+		t.Fatalf("Resolve(empty disc folder) = %#v, %v; want Folder", got, err)
+	}
+}

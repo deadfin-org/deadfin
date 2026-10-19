@@ -25,7 +25,7 @@ func resolveMusicArtist(options naming.NamingOptions) func(context.Context, Reso
 
 func resolveMusicAlbum(options naming.NamingOptions) func(context.Context, ResolveContext) (*item.Item, error) {
 	return func(_ context.Context, input ResolveContext) (*item.Item, error) {
-		if !input.Entry.IsDir || !collectionIs(input, item.CollectionTypeMusic) || hasAncestorKind(input, item.KindMusicAlbum) || !hasAudioChild(input.Children, options) {
+		if !input.Entry.IsDir || !collectionIs(input, item.CollectionTypeMusic) || hasAncestorKind(input, item.KindMusicAlbum) || !containsMusic(input.Children, input.ChildEntries, options) {
 			return nil, nil
 		}
 		resolved := initializeContext(input, item.KindMusicAlbum)
@@ -33,6 +33,10 @@ func resolveMusicAlbum(options naming.NamingOptions) func(context.Context, Resol
 	}
 }
 
+// hasMusicAlbumChild ports the directory loop of MusicArtistResolver.Resolve
+// (MusicArtistResolver.cs:93-119). An artist subfolder or a child that is a
+// music album makes the folder an artist. A multi-disc child folder is part
+// of an album, so it does not.
 func hasMusicAlbumChild(children []Entry, childEntries map[string][]Entry, options naming.NamingOptions) bool {
 	for _, child := range children {
 		if !child.IsDir {
@@ -44,11 +48,36 @@ func hasMusicAlbumChild(children []Entry, childEntries map[string][]Entry, optio
 				return true
 			}
 		}
-		if hasAudioChild(childEntries[normalizedEntryPath(child.Path)], options) {
+		if naming.IsMultiDiscAlbum(child.Path, options) {
+			continue
+		}
+		if containsMusic(childEntries[normalizedEntryPath(child.Path)], childEntries, options) {
 			return true
 		}
 	}
 	return false
+}
+
+// containsMusic ports MusicAlbumResolver.ContainsMusic with allowSubfolders
+// set (MusicAlbumResolver.cs:128-179). A folder holds music when it has an
+// audio file. Otherwise it holds music when it has at least one multi-disc
+// subfolder ("CD 01", "Disc 2", "Digital Media 01") with audio files and no
+// other subfolder with audio files.
+func containsMusic(children []Entry, childEntries map[string][]Entry, options naming.NamingOptions) bool {
+	if hasAudioChild(children, options) {
+		return true
+	}
+	discFolders := 0
+	for _, child := range children {
+		if !child.IsDir || !hasAudioChild(childEntries[normalizedEntryPath(child.Path)], options) {
+			continue
+		}
+		if !naming.IsMultiDiscAlbum(child.Path, options) {
+			return false
+		}
+		discFolders++
+	}
+	return discFolders > 0
 }
 
 func hasAudioChild(children []Entry, options naming.NamingOptions) bool {
