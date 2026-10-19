@@ -11,7 +11,10 @@ public: anyone can read them. Use the "Bug report" form for a fault and the
 2. Try the same action in Jellyfin, if you still have it. "Jellyfin does X,
    Deadfin does Y" is the most useful report.
 3. Try a second client if you can. A fault in one client only can be a
-   client defect.
+   client defect. Report a deadfin-web defect in
+   [deadfin-org/deadfin-web](https://github.com/deadfin-org/deadfin-web/issues)
+   and a SharkParty defect in
+   [deadfin-org/SharkParty](https://github.com/deadfin-org/SharkParty/issues).
 
 ## What to put in the report
 
