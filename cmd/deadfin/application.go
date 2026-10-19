@@ -2095,6 +2095,20 @@ func registerRoutes(rt *router.Router, services routeServices) {
 	handlers.RegisterPlaylists(rt, playlistService, playlistUsers, playlistBuilder, services.clock)
 	handlers.RegisterAuth(rt, services.login, services.users, services.sessions, services.items, services.itemBuilder, services.identity, services.startup, services.network, services.transcoding)
 	handlers.RegisterSessionLogout(rt, services.users, services.sessions, services.webSockets)
+	var deviceService handlers.DeviceService
+	if services.users != nil {
+		deviceService = services.users
+	}
+	var deviceSessions handlers.DeviceSessions
+	if services.sessions != nil {
+		deviceSessions = services.sessions
+	}
+	var deviceSockets handlers.SessionSockets
+	if services.webSockets != nil {
+		deviceSockets = services.webSockets
+	}
+	handlers.RegisterDevices(rt, deviceService, deviceSessions, deviceSockets)
+	handlers.RegisterSystemLogs(rt, services.paths.Log)
 	handlers.RegisterAPIKeys(rt, services.apiKeys, services.clock, rand.Reader)
 	handlers.RegisterClientLog(rt, handlers.ClientLogConfig{
 		Enabled: func() bool {

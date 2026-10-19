@@ -21,11 +21,14 @@ import (
 //   - network: MediaBrowser.Common/Net/NetworkConfigurationStore.cs
 //   - metadata: MediaBrowser.Controller/Library/MetadataConfigurationStore.cs
 //   - encoding: MediaBrowser.MediaEncoding/Configuration/EncodingConfigurationStore.cs
+//   - xbmcmetadata: MediaBrowser.XbmcMetadata/Configuration/NfoConfigurationFactory.cs
 const (
 	KeyBranding = "branding"
 	KeyNetwork  = "network"
 	KeyMetadata = "metadata"
 	KeyEncoding = "encoding"
+
+	KeyXbmcMetadata = "xbmcmetadata"
 )
 
 // Files that a Change can name.
@@ -35,6 +38,8 @@ const (
 	NetworkFile  = KeyNetwork + ".xml"
 	MetadataFile = KeyMetadata + ".xml"
 	EncodingFile = KeyEncoding + ".xml"
+
+	XbmcMetadataFile = KeyXbmcMetadata + ".xml"
 )
 
 // ErrUnknownConfiguration reports a named configuration key that no store
@@ -66,6 +71,8 @@ func (manager *Manager) NamedConfiguration(key string) (any, error) {
 		return manager.Metadata(), nil
 	case KeyEncoding:
 		return manager.Encoding(), nil
+	case KeyXbmcMetadata:
+		return manager.XbmcMetadata(), nil
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnknownConfiguration, key)
 }
@@ -115,6 +122,15 @@ func (manager *Manager) SaveNamedConfiguration(ctx context.Context, key string, 
 			if err := validateEncodingOptions(*options, posted); err != nil {
 				return err
 			}
+			*options = posted
+			return nil
+		})
+	case KeyXbmcMetadata:
+		var posted XbmcMetadataOptions
+		if err := jsonnum.Unmarshal(data, &posted); err != nil {
+			return invalidConfiguration(err)
+		}
+		return manager.UpdateXbmcMetadata(ctx, func(options *XbmcMetadataOptions) error {
 			*options = posted
 			return nil
 		})

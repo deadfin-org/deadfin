@@ -568,6 +568,8 @@ type Manager struct {
 	network  configurationSnapshot[NetworkConfiguration]
 	metadata configurationSnapshot[MetadataConfiguration]
 	encoding configurationSnapshot[EncodingOptions]
+
+	xbmcMetadata configurationSnapshot[XbmcMetadataOptions]
 }
 
 type configurationSnapshot[T any] struct {
@@ -612,6 +614,10 @@ func Open(ctx context.Context, paths Paths, changes *events.Bus[Change]) (*Manag
 	if err != nil {
 		return nil, err
 	}
+	xbmcMetadata, err := loadConfiguration(filepath.Join(paths.Config, XbmcMetadataFile), DefaultXbmcMetadataOptions, false)
+	if err != nil {
+		return nil, err
+	}
 	if err := contextError(ctx); err != nil {
 		return nil, err
 	}
@@ -624,6 +630,8 @@ func Open(ctx context.Context, paths Paths, changes *events.Bus[Change]) (*Manag
 		network:  configurationSnapshot[NetworkConfiguration]{value: network},
 		metadata: configurationSnapshot[MetadataConfiguration]{value: metadata},
 		encoding: configurationSnapshot[EncodingOptions]{value: encodingOptions},
+
+		xbmcMetadata: configurationSnapshot[XbmcMetadataOptions]{value: xbmcMetadata},
 	}, nil
 }
 

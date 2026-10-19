@@ -8,10 +8,6 @@
     "reason": "deferred: alternate source deletion not implemented"
   },
   {
-    "operationId": "DeleteDevice",
-    "reason": "deferred: device management not implemented"
-  },
-  {
     "operationId": "DeleteLyrics",
     "reason": "deferred: Lyrics not implemented"
   },
@@ -62,18 +58,6 @@
   {
     "operationId": "GetDefaultMetadataOptions",
     "reason": "deferred: default metadata options endpoint not implemented; read-only configuration slice implemented without this elevated route"
-  },
-  {
-    "operationId": "GetDeviceInfo",
-    "reason": "deferred: device management not implemented"
-  },
-  {
-    "operationId": "GetDeviceOptions",
-    "reason": "deferred: device management not implemented"
-  },
-  {
-    "operationId": "GetDevices",
-    "reason": "deferred: device management not implemented"
   },
   {
     "operationId": "GetFallbackFont",
@@ -128,10 +112,6 @@
     "reason": "deferred: Channels not implemented"
   },
   {
-    "operationId": "GetLogFile",
-    "reason": "deferred: server log access not implemented"
-  },
-  {
     "operationId": "GetLyrics",
     "reason": "deferred: Lyrics not implemented"
   },
@@ -158,10 +138,6 @@
   {
     "operationId": "GetRootFolder",
     "reason": "deferred: root folder endpoint not implemented"
-  },
-  {
-    "operationId": "GetServerLogs",
-    "reason": "deferred: server log access not implemented"
   },
   {
     "operationId": "GetSuggestions",
@@ -238,10 +214,6 @@
   {
     "operationId": "ShutdownApplication",
     "reason": "deferred: server restart/shutdown not implemented"
-  },
-  {
-    "operationId": "UpdateDeviceOptions",
-    "reason": "deferred: device management not implemented"
   },
   {
     "operationId": "UpdateMediaPath",

@@ -68,6 +68,14 @@ type DeviceOptions struct {
 	CustomName *string
 }
 
+// DeviceRecord is a device row with the facts that DeviceInfoDto joins to it:
+// the owner's name and the custom name from the device options.
+type DeviceRecord struct {
+	Device
+	UserName   string
+	CustomName *string
+}
+
 type APIKey struct {
 	ID               int64
 	Name             string
@@ -679,11 +687,43 @@ func (s *Identity) device(ctx context.Context, query string, args ...any) (Devic
 	return s.scanDevice(s.stores.Reader().QueryRowContext(ctx, query, args...))
 }
 
-func (s *Identity) scanDevice(row identityScanner) (Device, error) {
+// ListDeviceRecords returns the device rows, with the owner's name and the
+// custom name, in id order. A non-empty deviceID selects the rows of that
+// device only.
+func (s *Identity) ListDeviceRecords(ctx context.Context, deviceID string) ([]DeviceRecord, error) {
+	query := "SELECT d.id, d.user_id, d.access_token, d.app_name, d.app_version, d.device_name, d.device_id, d.date_created, d.date_modified, d.date_last_activity, u.name, o.custom_name FROM devices d JOIN users u ON u.id = d.user_id LEFT JOIN device_options o ON o.device_id = d.device_id"
+	var args []any
+	if deviceID != "" {
+		query += " WHERE d.device_id = " + s.p(1)
+		args = append(args, deviceID)
+	}
+	query += " ORDER BY d.id"
+	rows, err := s.stores.Reader().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	records := []DeviceRecord{}
+	for rows.Next() {
+		var record DeviceRecord
+		var customName sql.NullString
+		if record.Device, err = s.scanDevice(rows, &record.UserName, &customName); err != nil {
+			return nil, err
+		}
+		if customName.Valid {
+			record.CustomName = &customName.String
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+// scanDevice scans the ten device columns and then any extra columns.
+func (s *Identity) scanDevice(row identityScanner, extra ...any) (Device, error) {
 	var device Device
 	var userID any
 	var created, modified, activity any
-	if err := row.Scan(&device.ID, &userID, &device.AccessToken, &device.AppName, &device.AppVersion, &device.DeviceName, &device.DeviceID, &created, &modified, &activity); err != nil {
+	if err := row.Scan(append([]any{&device.ID, &userID, &device.AccessToken, &device.AppName, &device.AppVersion, &device.DeviceName, &device.DeviceID, &created, &modified, &activity}, extra...)...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Device{}, ErrNotFound
 		}
