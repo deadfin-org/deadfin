@@ -1114,6 +1114,12 @@ func (s *Scanner) scanLocked(ctx context.Context, opts RefreshOptions) (result R
 	record := func(event RefreshProgress) {
 		s.progress.publish(event)
 		progress = append(progress, event)
+		// Log a folder error when it occurs. Progress delivery waits for the
+		// drain, so a scan that stalls or never returns would otherwise log
+		// no failure at all (#702).
+		if event.Error != nil {
+			s.logger.Warn("scanner folder", "path", event.Path, "status", event.Status, "error", event.Error)
+		}
 	}
 
 	record(RefreshProgress{Status: "started"})

@@ -380,11 +380,6 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		CollectionsPath: filepath.Join(paths.Data, "collections"),
 		MetadataPath:    paths.Metadata,
 		DynamicImages:   dynamicImages,
-		Progress: func(event library.RefreshProgress) {
-			if event.Error != nil {
-				log.Printf("scanner: folder %s status %s: %v", event.Path, event.Status, event.Error)
-			}
-		},
 		RefreshComplete: func(result library.RefreshResult) {
 			requestStatisticsRefresh(stores, result)
 			if trickplayRunner == nil {

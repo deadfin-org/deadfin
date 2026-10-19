@@ -79,6 +79,9 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- The library scan logs a folder failure when the folder fails. Before, the
+  `scanner folder` lines came only after the whole scan ended, so a scan that
+  stalled logged no failure at all (#702).
 - A library scan keeps a folder that holds two names that differ only in
   case, such as `Live` and `live` on a case-sensitive NFS or ZFS share. Both
   names gave the same item ID, and the whole folder failed on every scan: an
