@@ -257,7 +257,7 @@ func TestSymlinkSourceDetectsRetargetAndTargetMutation(t *testing.T) {
 		if err := os.Symlink(first, link); err != nil {
 			t.Fatalf("Symlink(%q, %q): %v", first, link, err)
 		}
-		source := openSource(t, link, expectedForLstat(t, link))
+		source := openSource(t, link, expectedIdentityForStat(t, link))
 
 		if err := os.Remove(link); err != nil {
 			t.Fatalf("Remove(%q): %v", link, err)
@@ -278,7 +278,7 @@ func TestSymlinkSourceDetectsRetargetAndTargetMutation(t *testing.T) {
 		if err := os.Symlink(target, link); err != nil {
 			t.Fatalf("Symlink(%q, %q): %v", target, link, err)
 		}
-		source := openSource(t, link, expectedForLstat(t, link))
+		source := openSource(t, link, expectedIdentityForStat(t, link))
 		file, err := os.OpenFile(target, os.O_APPEND|os.O_WRONLY, 0)
 		if err != nil {
 			t.Fatalf("OpenFile(%q): %v", target, err)
@@ -292,6 +292,23 @@ func TestSymlinkSourceDetectsRetargetAndTargetMutation(t *testing.T) {
 		}
 		assertStale(t, "VerifyUnchanged() after symlink target mutation", source.VerifyUnchanged())
 	})
+}
+
+// TestSymlinkSourceVerifiesTargetFacts proves that a link snapshot carries
+// the facts of the link target, as the library scanner records them. The
+// link's own lstat facts do not describe the pinned file and are stale.
+func TestSymlinkSourceVerifiesTargetFacts(t *testing.T) {
+	base := t.TempDir()
+	target := writeSourceFileAt(t, filepath.Join(base, "target.mkv"), "target bytes of a different length")
+	link := filepath.Join(base, "movie.mkv")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("Symlink(%q, %q): %v", target, link, err)
+	}
+	source := openSource(t, link, expectedIdentityForStat(t, link))
+	if err := source.VerifyPathStillCurrent(); err != nil {
+		t.Errorf("VerifyPathStillCurrent() = %v, want nil", err)
+	}
+	assertOpenStale(t, link, expectedForLstat(t, link))
 }
 
 func TestSourceAccessorsRetainOpenTimeFacts(t *testing.T) {

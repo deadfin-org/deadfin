@@ -1397,7 +1397,7 @@ func (s *Scanner) planSources(ctx context.Context, folder VirtualFolder, collect
 			continue
 		}
 		normalizeEntries(entries)
-		rootTask := scanTask{folder: *rootItem, entry: Entry{Path: path, IsDir: true}, entries: entries, hasEntries: true, collection: collection, options: folder.Options, libraryRoot: path, ancestors: []*item.Item{&virtual}, refresh: opts, collectionFolderID: folder.CollectionFolderID}
+		rootTask := scanTask{folder: *rootItem, entry: Entry{Path: path, IsDir: true}, entries: entries, hasEntries: true, collection: collection, options: folder.Options, libraryRoot: path, ancestors: []*item.Item{&virtual}, refresh: opts, collectionFolderID: folder.CollectionFolderID, branch: visitBranch(nil, directoryIdentity(path))}
 		resolution, resolveErr := s.resolveFolder(ctx, rootTask)
 		if resolveErr != nil {
 			return nil, nil, nil, skipped, RefreshProgress{Path: folder.Path, Status: "failed", Error: fmt.Errorf("resolve source %q: %w", path, resolveErr)}, false
@@ -1655,6 +1655,10 @@ type scanTask struct {
 	refresh            RefreshOptions
 	progress           RefreshProgress
 	collectionFolderID dto.UUID
+	// branch holds the directory identities from the source root down to
+	// and including this folder. A directory entry on the branch is a link
+	// cycle and is not scanned.
+	branch []visitedDirectory
 }
 
 type scanOutcome struct {
@@ -1894,18 +1898,21 @@ func (s *Scanner) scanFolder(ctx context.Context, task scanTask) scanOutcome {
 	return outcome
 }
 
-// readDirectoryChildren returns the cached listing of path, or reads,
-// normalizes, and caches it. A listing that cannot be read is empty.
-func (s *Scanner) readDirectoryChildren(directoryChildren map[string][]Entry, path string) []Entry {
-	key := normalizedEntryPath(path)
+// readDirectoryChildren returns the cached listing of directory, or reads,
+// normalizes, and caches it. A listing that cannot be read is empty. branch
+// holds the directories above directory; a child directory on that branch
+// or equal to directory is a link cycle and is dropped from the listing.
+func (s *Scanner) readDirectoryChildren(directoryChildren map[string][]Entry, directory Entry, branch []visitedDirectory) []Entry {
+	key := normalizedEntryPath(directory.Path)
 	if children, found := directoryChildren[key]; found {
 		return children
 	}
-	children, err := s.readMediaDir(path)
+	children, err := s.readMediaDir(directory.Path)
 	if err != nil {
 		return nil
 	}
 	normalizeEntries(children)
+	children = s.dropDirectoryCycles(children, visitBranch(branch, directory.Identity))
 	directoryChildren[key] = children
 	return children
 }
@@ -1925,6 +1932,7 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 		}
 	}
 	normalizeEntries(entries)
+	entries = s.dropDirectoryCycles(entries, task.branch)
 	entryPaths := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
 		entryPaths[normalizedEntryPath(entry.Path)] = struct{}{}
@@ -1939,6 +1947,7 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 			continue
 		}
 		key := normalizedEntryPath(entry.Path)
+		entryBranch := visitBranch(task.branch, entry.Identity)
 		children, found := directoryChildren[key]
 		if !found {
 			var err error
@@ -1947,13 +1956,14 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 				continue
 			}
 			normalizeEntries(children)
+			children = s.dropDirectoryCycles(children, entryBranch)
 			directoryChildren[key] = children
 		}
 		for _, child := range children {
 			if !child.IsDir {
 				continue
 			}
-			grandchildren := s.readDirectoryChildren(directoryChildren, child.Path)
+			grandchildren := s.readDirectoryChildren(directoryChildren, child, entryBranch)
 			// An artist folder is an artist when a child album holds its
 			// tracks in multi-disc subfolders (MusicArtistResolver calls
 			// MusicAlbumResolver.IsMusicAlbum on each child), so a music
@@ -1963,7 +1973,7 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 			}
 			for _, grandchild := range grandchildren {
 				if grandchild.IsDir {
-					s.readDirectoryChildren(directoryChildren, grandchild.Path)
+					s.readDirectoryChildren(directoryChildren, grandchild, visitBranch(entryBranch, child.Identity))
 				}
 			}
 		}
@@ -2373,8 +2383,9 @@ func (s *Scanner) resolveFolder(ctx context.Context, task scanTask) (folderResol
 		if _, quarantined := quarantinedIDs[candidate.ID]; quarantined {
 			continue
 		}
-		childEntries, found := directoryChildren[normalizedEntryPath(*candidate.Path)]
-		children = append(children, scanTask{folder: candidate, entry: Entry{Path: *candidate.Path, IsDir: true}, entries: childEntries, hasEntries: found, childEntries: directoryChildren, collection: task.collection, options: task.options, libraryRoot: task.libraryRoot, ancestors: appendAncestor(task.ancestors, task.folder), refresh: task.refresh, collectionFolderID: task.collectionFolderID})
+		candidateKey := normalizedEntryPath(*candidate.Path)
+		childEntries, found := directoryChildren[candidateKey]
+		children = append(children, scanTask{folder: candidate, entry: Entry{Path: *candidate.Path, IsDir: true}, entries: childEntries, hasEntries: found, childEntries: directoryChildren, collection: task.collection, options: task.options, libraryRoot: task.libraryRoot, ancestors: appendAncestor(task.ancestors, task.folder), refresh: task.refresh, collectionFolderID: task.collectionFolderID, branch: visitBranch(task.branch, entryByPath[candidateKey].Identity)})
 	}
 	before := make(map[dto.UUID]refreshSatelliteSnapshot, len(existingByPath))
 	for _, previous := range existingByPath {
@@ -3208,6 +3219,12 @@ func readDirectory(path string) ([]Entry, error) {
 // unreadable entry does not hide its siblings. A transient stat error on a
 // network mount (ESTALE, EIO) would otherwise drop the whole directory and
 // its subtree from the scan.
+//
+// A symbolic link is followed. Upstream resolves a file link to its final
+// target (ManagedFileSystem.GetFileSystemMetadata), and .NET enumeration
+// reports a link to a directory as a directory. The entry keeps the link path
+// and carries the facts of the target. A dangling link, or a link loop that
+// the kernel rejects with ELOOP, is reported to skip like an unreadable entry.
 func readDirectoryReporting(path string, skip func(string, error)) (result []Entry, err error) {
 	directory, err := os.Open(path)
 	if err != nil {
@@ -3225,10 +3242,16 @@ func readDirectoryReporting(path string, skip func(string, error)) (result []Ent
 	}
 	result = make([]Entry, 0, len(entries))
 	for _, entry := range entries {
-		info, err := entry.Info()
+		entryPath := filepath.Join(path, entry.Name())
+		var info os.FileInfo
+		if entry.Type()&os.ModeSymlink != 0 {
+			info, err = os.Stat(entryPath)
+		} else {
+			info, err = entry.Info()
+		}
 		if err != nil {
 			if skip != nil {
-				skip(filepath.Join(path, entry.Name()), err)
+				skip(entryPath, err)
 			}
 			continue
 		}
@@ -3236,14 +3259,67 @@ func readDirectoryReporting(path string, skip func(string, error)) (result []Ent
 		if !mode.IsRegular() && !mode.IsDir() {
 			continue
 		}
-		created := entryCreatedAt(filepath.Join(path, entry.Name()), info)
-		identity := FileIdentity{}
-		if mode.IsRegular() {
-			identity = entryFileIdentity(info)
-		}
-		result = append(result, Entry{Path: filepath.Join(path, entry.Name()), IsDir: info.IsDir(), Size: info.Size(), Created: created, Modified: info.ModTime(), Identity: identity})
+		created := entryCreatedAt(entryPath, info)
+		result = append(result, Entry{Path: entryPath, IsDir: info.IsDir(), Size: info.Size(), Created: created, Modified: info.ModTime(), Identity: entryFileIdentity(info)})
 	}
 	return result, nil
+}
+
+// directoryIdentity returns the device and inode of the directory at path,
+// following links. It returns an invalid identity when the platform does not
+// expose one or path cannot be read.
+func directoryIdentity(path string) FileIdentity {
+	info, err := os.Stat(path)
+	if err != nil || !info.IsDir() {
+		return FileIdentity{}
+	}
+	return entryFileIdentity(info)
+}
+
+// visitedDirectory is the device and inode of one directory on a scan branch.
+type visitedDirectory struct{ device, inode uint64 }
+
+// visitBranch returns branch extended with identity. The result never shares
+// storage with branch, so sibling tasks do not see each other's directories.
+func visitBranch(branch []visitedDirectory, identity FileIdentity) []visitedDirectory {
+	result := make([]visitedDirectory, len(branch), len(branch)+1)
+	copy(result, branch)
+	if identity.Valid {
+		result = append(result, visitedDirectory{device: identity.Device, inode: identity.Inode})
+	}
+	return result
+}
+
+func onBranch(branch []visitedDirectory, identity FileIdentity) bool {
+	if !identity.Valid {
+		return false
+	}
+	for _, visited := range branch {
+		if visited.device == identity.Device && visited.inode == identity.Inode {
+			return true
+		}
+	}
+	return false
+}
+
+// dropDirectoryCycles removes each directory entry that is a directory on
+// branch: the directory being listed or one of its ancestors. Only a
+// directory link can produce such an entry. Upstream follows the link and
+// nests copies of the subtree until path resolution fails with ELOOP. The
+// scanner skips the entry instead (D-86).
+func (s *Scanner) dropDirectoryCycles(entries []Entry, branch []visitedDirectory) []Entry {
+	if len(branch) == 0 {
+		return entries
+	}
+	kept := make([]Entry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir && onBranch(branch, entry.Identity) {
+			s.logger.Warn("scanner: skip directory link to an ancestor", "path", entry.Path)
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
 }
 
 func cloneDirectoryEntries(values map[string][]Entry) map[string][]Entry {

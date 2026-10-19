@@ -55,6 +55,84 @@ func TestReadDirectoryReportsUnreadableEntriesWithoutFailingTheListing(t *testin
 	}
 }
 
+// TestReadDirectoryFollowsSymbolicLinks ports upstream link handling
+// (ManagedFileSystem.GetFileSystemMetadata). A link entry keeps the link
+// path and carries the facts of its target. A dangling link and a link loop
+// are reported and skipped.
+func TestReadDirectoryFollowsSymbolicLinks(t *testing.T) {
+	base := t.TempDir()
+	directory := filepath.Join(base, "music")
+	target := filepath.Join(base, "target")
+	for _, path := range []string{directory, target} {
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	targetFile := filepath.Join(base, "track.flac")
+	if err := os.WriteFile(targetFile, []byte("linked audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	links := map[string]string{
+		"file.flac": targetFile,
+		"dir":       target,
+		"dangling":  filepath.Join(base, "missing.flac"),
+		"loop":      filepath.Join(directory, "loop"),
+	}
+	for name, destination := range links {
+		if err := os.Symlink(destination, filepath.Join(directory, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var reported []string
+	entries, err := readDirectoryReporting(directory, func(path string, err error) {
+		if err == nil {
+			t.Errorf("skip %q reported a nil error", path)
+		}
+		reported = append(reported, path)
+	})
+	if err != nil {
+		t.Fatalf("readDirectoryReporting error = %v", err)
+	}
+	sort.Strings(reported)
+	if want := []string{filepath.Join(directory, "dangling"), filepath.Join(directory, "loop")}; len(reported) != 2 || reported[0] != want[0] || reported[1] != want[1] {
+		t.Fatalf("reported = %v, want %v", reported, want)
+	}
+	byPath := make(map[string]Entry, len(entries))
+	for _, entry := range entries {
+		byPath[entry.Path] = entry
+	}
+	if len(byPath) != 2 {
+		t.Fatalf("entries = %#v, want the file link and the directory link", entries)
+	}
+	file, found := byPath[filepath.Join(directory, "file.flac")]
+	if !found || file.IsDir || file.Size != int64(len("linked audio")) {
+		t.Fatalf("file link entry = %#v (found %t), want a regular file with the target size", file, found)
+	}
+	dir, found := byPath[filepath.Join(directory, "dir")]
+	if !found || !dir.IsDir {
+		t.Fatalf("directory link entry = %#v (found %t), want a directory", dir, found)
+	}
+	if want := directoryIdentity(target); want.Valid && (dir.Identity.Device != want.Device || dir.Identity.Inode != want.Inode) {
+		t.Fatalf("directory link identity = %+v, want the target identity %+v", dir.Identity, want)
+	}
+}
+
+func TestVisitBranchDoesNotShareStorage(t *testing.T) {
+	root := visitBranch(nil, FileIdentity{Device: 1, Inode: 1, Valid: true})
+	left := visitBranch(root, FileIdentity{Device: 1, Inode: 2, Valid: true})
+	right := visitBranch(root, FileIdentity{Device: 1, Inode: 3, Valid: true})
+	if onBranch(right, FileIdentity{Device: 1, Inode: 2, Valid: true}) || !onBranch(left, FileIdentity{Device: 1, Inode: 2, Valid: true}) {
+		t.Fatalf("left = %v, right = %v, want separate branches", left, right)
+	}
+	if got := visitBranch(root, FileIdentity{}); len(got) != 1 {
+		t.Fatalf("visitBranch with an invalid identity = %v, want the branch unchanged", got)
+	}
+	if onBranch(root, FileIdentity{Device: 1, Inode: 1}) {
+		t.Fatal("onBranch matched an invalid identity")
+	}
+}
+
 func TestDropIdentityCollisionsKeepsOrdinalLowestPath(t *testing.T) {
 	upper, lower, other := "/m/B/One", "/m/B/one", "/m/B/Two"
 	desired := []item.Item{

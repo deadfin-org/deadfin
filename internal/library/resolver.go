@@ -31,7 +31,9 @@ const (
 	ResolverPriorityLast
 )
 
-// FileIdentity is the scanner-owned lstat identity for a regular file.
+// FileIdentity is the scanner-owned identity for a regular file or a
+// directory. The scanner follows links, so a link entry carries the identity
+// of its target.
 // Valid is false on platforms whose filesystem metadata cannot provide it.
 type FileIdentity struct {
 	Device  uint64

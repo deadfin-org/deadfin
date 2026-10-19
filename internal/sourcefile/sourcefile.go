@@ -53,9 +53,11 @@ type Source struct {
 }
 
 // Open opens path once, validates the opened descriptor against expected, and
-// retains that descriptor. Final symlinks are deliberately followed: for a
-// symlink snapshot, expected facts describe the link while the descriptor pins
-// its regular-file target.
+// retains that descriptor. Final symlinks are deliberately followed: the
+// library scanner records the facts of a link's target, as upstream does
+// (ManagedFileSystem.GetFileSystemMetadata), so expected facts describe the
+// regular-file target that the descriptor pins. The link's own identity is
+// kept for the liveness re-checks.
 func Open(path string, expected Expected) (*Source, error) {
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NONBLOCK|unix.O_NOCTTY, 0)
 	if err != nil {
@@ -110,17 +112,11 @@ func Open(path string, expected Expected) (*Source, error) {
 		source.viaSymlink = true
 		source.linkDev = uint64(listed.Dev)
 		source.linkIno = uint64(listed.Ino)
-		linkMtime, linkCtime := statTimes(&listed)
-		if err := verifyExpected(expected, listed.Size, source.linkIno, linkMtime, linkCtime); err != nil {
-			return nil, closeOpenFile(file, fmt.Errorf("source link %q: %w", path, err))
-		}
-	} else {
-		if uint64(listed.Dev) != source.dev || uint64(listed.Ino) != source.ino {
-			return nil, closeOpenFile(file, stale("source %q changed while opening", path))
-		}
-		if err := verifyExpected(expected, source.size, source.ino, source.mtime, source.ctime); err != nil {
-			return nil, closeOpenFile(file, fmt.Errorf("source %q: %w", path, err))
-		}
+	} else if uint64(listed.Dev) != source.dev || uint64(listed.Ino) != source.ino {
+		return nil, closeOpenFile(file, stale("source %q changed while opening", path))
+	}
+	if err := verifyExpected(expected, source.size, source.ino, source.mtime, source.ctime); err != nil {
+		return nil, closeOpenFile(file, fmt.Errorf("source %q: %w", path, err))
 	}
 
 	return source, nil

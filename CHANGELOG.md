@@ -79,6 +79,13 @@ v0.3.0 is the first public alpha of Deadfin.
 
 ### Fixed
 
+- A library scan follows symbolic links, as upstream does. A linked media
+  file or a linked directory, also one outside the library root, enters the
+  library under the link path; before, the scan left every link out. A
+  dangling link is skipped with a warning. A directory link to the directory
+  that holds it or to one of its ancestors is skipped with a warning (D-86).
+  A file link's snapshot now carries the facts of its target, so playback and
+  probing check the target file.
 - The library scan logs a folder failure when the folder fails. Before, the
   `scanner folder` lines came only after the whole scan ended, so a scan that
   stalled logged no failure at all (#702).
