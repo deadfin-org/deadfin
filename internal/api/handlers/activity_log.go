@@ -18,10 +18,10 @@ import (
 	"github.com/deadfin-org/deadfin/internal/store"
 )
 
-// ActivityLogReader supplies the in-memory activity feed for the REST log
-// endpoint. The existing *activitylog.Log satisfies this interface.
+// ActivityLogReader supplies the persisted activity log for the REST log
+// endpoint. *activitylog.Log satisfies this interface.
 type ActivityLogReader interface {
-	Entries() []activitylog.Entry
+	Query(context.Context, activitylog.Query) (activitylog.Page, error)
 }
 
 // RegisterActivityLog registers the GET /System/ActivityLog/Entries route
@@ -158,8 +158,51 @@ func (h activityLogHandler) entries(w http.ResponseWriter, request *http.Request
 		return
 	}
 
-	entries := h.log.Entries()
-	filtered := filterActivityEntries(request.Context(), entries, &q, h.users, w)
+	startIndex := 0
+	if q.StartIndex != nil {
+		startIndex = *q.StartIndex
+	}
+	limit := 100
+	if q.Limit != nil {
+		limit = *q.Limit
+	}
+
+	// The store applies the exact predicates. When the request has no text
+	// filter and no explicit sort, the store also pages in the default
+	// newest-first order (ActivityManager.cs GetPagedResultAsync).
+	stored := activitylog.Query{HasUserID: q.HasUserID, Severity: (*string)(q.Severity)}
+	if q.MinDate != nil {
+		stored.MinDate = &q.MinDate.Time
+	}
+	if q.MaxDate != nil {
+		stored.MaxDate = &q.MaxDate.Time
+	}
+	if q.ItemID != nil {
+		itemID := q.ItemID.String()
+		stored.ItemID = &itemID
+	}
+	if q.Name == nil && q.Overview == nil && q.ShortOverview == nil && q.Type == nil && q.Username == nil && len(q.SortBy) == 0 {
+		stored.StartIndex = startIndex
+		stored.Limit = &limit
+		result, err := h.log.Query(request.Context(), stored)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		page := dto.NewQueryResult[activitylog.Entry]()
+		page.Items = append(page.Items, result.Entries...)
+		page.TotalRecordCount = result.TotalRecordCount
+		page.StartIndex = startIndex
+		_ = render.JSON(w, request, http.StatusOK, page)
+		return
+	}
+
+	result, err := h.log.Query(request.Context(), stored)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	filtered := filterActivityEntries(request.Context(), result.Entries, &q, h.users, w)
 	if filtered == nil {
 		return // error already written
 	}
@@ -181,15 +224,6 @@ func (h activityLogHandler) entries(w http.ResponseWriter, request *http.Request
 		}
 	}
 	sortActivityEntries(filtered, q.SortBy, q.SortOrder, nameCache)
-
-	startIndex := 0
-	if q.StartIndex != nil {
-		startIndex = *q.StartIndex
-	}
-	limit := 100
-	if q.Limit != nil {
-		limit = *q.Limit
-	}
 
 	page := dto.NewQueryResult[activitylog.Entry]()
 	for i := startIndex; i < len(filtered) && len(page.Items) < limit; i++ {

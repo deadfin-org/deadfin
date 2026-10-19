@@ -28,6 +28,7 @@ func UserIDReferences() []UserIDReference {
 		{Table: "user_data", Column: "user_id"},
 		{Table: "item_shares", Column: "user_id"},
 		{Table: "items", Column: "playlist_owner_user_id"},
+		{Table: "activity_log", Column: "user_id"},
 	}
 }
 

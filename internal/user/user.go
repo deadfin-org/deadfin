@@ -23,6 +23,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/deadfin-org/deadfin/internal/activitylog"
 	"github.com/deadfin-org/deadfin/internal/clock"
 	"github.com/deadfin-org/deadfin/internal/dto"
 	"github.com/deadfin-org/deadfin/internal/item"
@@ -63,6 +64,7 @@ type Service struct {
 	identity *store.Identity
 	clock    clock.Clock
 	random   io.Reader
+	activity activitylog.Recorder
 }
 
 // StartupUserUpdate describes the startup wizard's one-way first-user setup.
@@ -111,6 +113,20 @@ type PasswordUpdate struct {
 
 func New(identity *store.Identity, c clock.Clock, random io.Reader) *Service {
 	return &Service{identity: identity, clock: c, random: random}
+}
+
+// WithActivity makes the service record user created, deleted, password
+// changed and locked out entries in the activity log (the UserManager event
+// consumers). Call it before the service handles a request.
+func (s *Service) WithActivity(recorder activitylog.Recorder) *Service {
+	s.activity = recorder
+	return s
+}
+
+func (s *Service) record(entry activitylog.Entry) {
+	if s.activity != nil {
+		s.activity.Record(entry)
+	}
 }
 
 // Initialize creates the initial administrator only for an empty identity
@@ -168,7 +184,7 @@ func (s *Service) Create(ctx context.Context, name, password string) (store.User
 	if err != nil {
 		return store.User{}, err
 	}
-	return s.identity.CreateUser(ctx, store.User{
+	created, err := s.identity.CreateUser(ctx, store.User{
 		ID:             id,
 		Name:           name,
 		NormalizedName: NormalizeName(name),
@@ -176,6 +192,29 @@ func (s *Service) Create(ctx context.Context, name, password string) (store.User
 		Policy:         []byte("{}"),
 		Configuration:  []byte("{}"),
 	})
+	if err != nil {
+		return store.User{}, err
+	}
+	s.record(activitylog.UserCreated(created.ID, created.Name))
+	return created, nil
+}
+
+// CreateByName ports UserController.CreateUserByName: it creates the user
+// and, when the request carries a password, sets it through ChangePassword,
+// which writes the password-changed entry as upstream does.
+func (s *Service) CreateByName(ctx context.Context, name string, password *string) (store.User, error) {
+	value := ""
+	if password != nil {
+		value = *password
+	}
+	created, err := s.Create(ctx, name, value)
+	if err != nil {
+		return store.User{}, err
+	}
+	if password != nil {
+		s.record(activitylog.UserPasswordChanged(created.ID, created.Name))
+	}
+	return created, nil
 }
 
 func (s *Service) Get(ctx context.Context, id dto.UUID) (store.User, error) {
@@ -268,8 +307,10 @@ func (s *Service) UpdatePassword(ctx context.Context, actor Actor, target dto.UU
 	if actor.UserID == dto.NilUUID {
 		return ErrUnauthorized
 	}
+	var changed store.User
 	if update.Reset {
-		return s.identity.SetPasswordHashIf(ctx, target, "", func(user store.User) error {
+		err := s.identity.SetPasswordHashIf(ctx, target, "", func(user store.User) error {
+			changed = user
 			policy, err := userPolicy(user)
 			if err != nil {
 				return err
@@ -282,12 +323,18 @@ func (s *Service) UpdatePassword(ctx context.Context, actor Actor, target dto.UU
 			}
 			return ErrForbidden
 		})
+		if err != nil {
+			return err
+		}
+		s.record(activitylog.UserPasswordChanged(changed.ID, changed.Name))
+		return nil
 	}
 	passwordHash, err := s.hashPassword(update.New)
 	if err != nil {
 		return err
 	}
-	return s.identity.SetPasswordHashAndRevokeTokensIf(ctx, target, passwordHash, actor.Token, func(user store.User) error {
+	err = s.identity.SetPasswordHashAndRevokeTokensIf(ctx, target, passwordHash, actor.Token, func(user store.User) error {
+		changed = user
 		if actor.UserID == user.ID {
 			if update.Current == "" {
 				return ErrForbidden
@@ -313,6 +360,11 @@ func (s *Service) UpdatePassword(ctx context.Context, actor Actor, target dto.UU
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.record(activitylog.UserPasswordChanged(changed.ID, changed.Name))
+	return nil
 }
 
 // FirstUser returns the deterministic initialized user without exposing the
@@ -350,7 +402,17 @@ func (s *Service) UpdateStartupUser(ctx context.Context, update StartupUserUpdat
 		storeUpdate.NormalizedName = NormalizeName(*update.Name)
 		storeUpdate.Rename = true
 	}
-	return s.identity.ConfigureFirstUser(ctx, storeUpdate)
+	if err := s.identity.ConfigureFirstUser(ctx, storeUpdate); err != nil {
+		return err
+	}
+	// StartupController.UpdateStartupUser sets the password through
+	// UserManager.ChangePassword, which writes the password-changed entry.
+	name := first.Name
+	if update.Name != nil {
+		name = *update.Name
+	}
+	s.record(activitylog.UserPasswordChanged(first.ID, name))
+	return nil
 }
 
 func (s *Service) Update(ctx context.Context, user store.User) error {
@@ -430,7 +492,9 @@ func (s *Service) UpdateUser(ctx context.Context, actor Actor, target dto.UUID, 
 }
 
 func (s *Service) Delete(ctx context.Context, id dto.UUID) error {
-	return s.identity.DeleteUserIf(ctx, id, func(users []store.User, target store.User) error {
+	var deleted store.User
+	err := s.identity.DeleteUserIf(ctx, id, func(users []store.User, target store.User) error {
+		deleted = target
 		if len(users) <= 1 {
 			return ErrLastUser
 		}
@@ -447,6 +511,11 @@ func (s *Service) Delete(ctx context.Context, id dto.UUID) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.record(activitylog.UserDeleted(deleted.Name))
+	return nil
 }
 
 func (s *Service) ChangePassword(ctx context.Context, id dto.UUID, password string) error {
@@ -454,7 +523,9 @@ func (s *Service) ChangePassword(ctx context.Context, id dto.UUID, password stri
 	if err != nil {
 		return err
 	}
-	return s.identity.SetPasswordHashIf(ctx, id, passwordHash, func(user store.User) error {
+	var changed store.User
+	err = s.identity.SetPasswordHashIf(ctx, id, passwordHash, func(user store.User) error {
+		changed = user
 		admin, err := isAdministrator(user)
 		if err != nil {
 			return err
@@ -464,6 +535,11 @@ func (s *Service) ChangePassword(ctx context.Context, id dto.UUID, password stri
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.record(activitylog.UserPasswordChanged(changed.ID, changed.Name))
+	return nil
 }
 
 // VerifyPassword performs Jellyfin-compatible PBKDF2 verification. A verified
@@ -506,7 +582,14 @@ func (s *Service) RecordSuccessfulLogin(ctx context.Context, id dto.UUID) error 
 // RecordFailedLogin persists failed authentication accounting without issuing
 // a session or token.
 func (s *Service) RecordFailedLogin(ctx context.Context, id dto.UUID) error {
-	return s.identity.RecordFailedLogin(ctx, id)
+	lockedOut, err := s.identity.RecordFailedLogin(ctx, id)
+	if err != nil || !lockedOut {
+		return err
+	}
+	if locked, err := s.identity.User(ctx, id); err == nil {
+		s.record(activitylog.UserLockedOut(locked.ID, locked.Name))
+	}
+	return nil
 }
 
 // IssueToken creates the device row that owns an authorization token. Existing

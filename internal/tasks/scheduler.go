@@ -94,9 +94,10 @@ type Scheduler struct {
 	started      bool
 	done         chan struct{} // closed once at shutdown; never blocks
 	tasks        map[string]*task
-	workers      int32         // active execution + timer goroutines
-	drained      chan struct{} // closed once when workers reaches zero during shutdown
-	closeDrained sync.Once     // guards the single close(drained)
+	completed    func(context.Context, Result) // set before Start; runs after each execution
+	workers      int32                         // active execution + timer goroutines
+	drained      chan struct{}                 // closed once when workers reaches zero during shutdown
+	closeDrained sync.Once                     // guards the single close(drained)
 }
 
 // NewScheduler constructs a task scheduler. configDir and dataDir are the
@@ -126,6 +127,22 @@ func NewScheduler(c clock.Clock, loc *time.Location, catalog *Catalog, configDir
 		drained: make(chan struct{}),
 		tasks:   make(map[string]*task),
 	}, nil
+}
+
+// OnCompleted sets the function that receives each execution result after the
+// scheduler records it (upstream TaskCompletionEventArgs consumers). Set it
+// before Start. The function runs on the execution goroutine.
+func (s *Scheduler) OnCompleted(observer func(context.Context, Result)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return ErrSchedulerClosed
+	}
+	if s.started {
+		return ErrSchedulerStarted
+	}
+	s.completed = observer
+	return nil
 }
 
 // Register adds a task definition before Start. A duplicate ID is rejected.
@@ -557,6 +574,9 @@ func (s *Scheduler) execute(ctx context.Context, t *task) {
 	snap := t.snapshot()
 	t.mu.Unlock()
 	_ = s.catalog.Upsert(context.Background(), snap)
+	if s.completed != nil {
+		s.completed(context.Background(), result)
+	}
 
 	// Coalesced re-execution: if a trigger or Run arrived during execution,
 	// re-execute once with the retained firing trigger so the coalesced run

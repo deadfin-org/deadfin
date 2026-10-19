@@ -265,11 +265,7 @@ func (h authHandler) create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	password := ""
-	if body.Password != nil {
-		password = *body.Password
-	}
-	created, err := h.users.Create(r.Context(), *body.Name, password)
+	created, err := h.users.CreateByName(r.Context(), *body.Name, body.Password)
 	if err != nil {
 		writeUserError(w, err)
 		return

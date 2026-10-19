@@ -154,7 +154,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 	realClock := clock.NewReal()
 	changes := events.NewBus[config.Change](realClock)
 	userDataChanges := events.NewBus[playstate.UserDataChanged](realClock)
-	activity := activitylog.New(realClock)
+	var activity *activitylog.Log
 	scheduledTasks := tasks.New(realClock)
 	var scheduler *tasks.Scheduler
 	var stores store.Stores
@@ -216,7 +216,9 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 			err = errors.Join(err, topology.Close())
 		}
 		err = errors.Join(err, scheduledTasks.Close(context.Background()))
-		err = errors.Join(err, activity.Close(context.Background()))
+		if activity != nil {
+			err = errors.Join(err, activity.Close(context.Background()))
+		}
 		err = errors.Join(err, userDataChanges.Close(context.Background()))
 		if stores != nil {
 			err = errors.Join(err, stores.Close())
@@ -264,8 +266,9 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 	}
 	log.Printf("application: store %s", selectedDatabase)
 
+	activity = activitylog.NewWithStore(realClock, store.NewActivityLogStore(stores), slog.Default())
 	identity := store.NewIdentity(stores)
-	users := user.New(identity, realClock, rand.Reader)
+	users := user.New(identity, realClock, rand.Reader).WithActivity(activity)
 	if _, err := users.Initialize(ctx); err != nil {
 		return nil, fmt.Errorf("initialize users: %w", err)
 	}
@@ -435,7 +438,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 	network := configuredNetwork{manager: manager, lan: &lanSubnets{manager: manager}}
 	evaluator := auth.NewEvaluator(manager, network, identity, realClock.Now)
 	sessions = session.New(realClock)
-	playstateService = playstate.NewService(realClock, manager, items, users, sessions, userDataChanges)
+	playstateService = playstate.NewService(realClock, manager, items, users, sessions, userDataChanges).WithActivity(activity)
 	listenBrainzConfig := listenbrainz.LoadConfig(filepath.Join(paths.Config, "plugins", "Jellyfin.Plugin.ListenBrainz.xml"))
 	listenBrainzClient := listenbrainz.NewClient(listenbrainz.ClientOptions{
 		Doer:      &http.Client{Timeout: 30 * time.Second},
@@ -485,6 +488,12 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 				Command: "Stop", SeekPositionTicks: state.PositionTicks, ControllingUserID: &controllingUserID,
 			})
 		},
+		OnSessionStarted: func(ctx context.Context, snapshot session.Snapshot) {
+			recordSessionActivity(ctx, activity, users, snapshot, activitylog.SessionStarted)
+		},
+		OnSessionEnded: func(ctx context.Context, snapshot session.Snapshot) {
+			recordSessionActivity(ctx, activity, users, snapshot, activitylog.SessionEnded)
+		},
 	}); err != nil {
 		return nil, fmt.Errorf("configure session watchdogs: %w", err)
 	}
@@ -498,6 +507,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		LegacyAuthorizationEnabled: func() bool {
 			return manager.System().EnableLegacyAuthorization
 		},
+		Activity: activity,
 	})
 	playbackService := playback.NewPlaybackInfoService(playback.PlaybackInfoServiceConfig{
 		Sources:        playbackSourceReader{items: items},
@@ -613,12 +623,15 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		LibraryScanRunning: scheduler,
 		StoreMaintainer:    storeMaintainerAdapter{stores: stores},
 		ActivityLogPruner:  activity,
-		TranscodeCleaner:   transcodes,
-		UserDataCleaner:    userDataCleanerAdapter{stores: stores},
-		Clock:              realClock,
-		LogPath:            paths.Log,
-		CachePath:          paths.Cache,
-		TranscodePath:      paths.Transcodes,
+		ActivityLogRetentionDays: func() *int {
+			return manager.System().ActivityLogRetentionDays
+		},
+		TranscodeCleaner: transcodes,
+		UserDataCleaner:  userDataCleanerAdapter{stores: stores},
+		Clock:            realClock,
+		LogPath:          paths.Log,
+		CachePath:        paths.Cache,
+		TranscodePath:    paths.Transcodes,
 	}
 	// Register the RefreshMetadata extension task only in the production
 	// server (imageProcessor is injected by main.go) and in composition
@@ -646,6 +659,13 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 		if err := scheduler.Register(reg.def, reg.run); err != nil {
 			return nil, fmt.Errorf("register scheduled task %s: %w", reg.def.ID, err)
 		}
+	}
+	if err := scheduler.OnCompleted(func(_ context.Context, result tasks.Result) {
+		if result.Status == tasks.StatusFailed {
+			activity.Record(activitylog.TaskFailed(result.Name, result.ErrorMessage, result.LongErrorMessage, result.EndTimeUTC.Sub(result.StartTimeUTC.Time)))
+		}
+	}); err != nil {
+		return nil, fmt.Errorf("observe task results: %w", err)
 	}
 	if err := scheduler.Start(ctx); err != nil {
 		return nil, fmt.Errorf("start task scheduler: %w", err)
@@ -2268,6 +2288,19 @@ func (sessions loginSessions) checkLimit(ctx context.Context, userID dto.UUID, c
 		return err
 	}
 	return sessions.manager.CheckLimit(userID, client, deviceID, maximum)
+}
+
+// recordSessionActivity writes the SessionStartedLogger or SessionEndedLogger
+// entry. A session without a user name writes none, as upstream.
+func recordSessionActivity(ctx context.Context, activity activitylog.Recorder, users *user.Service, snapshot session.Snapshot, build func(dto.UUID, string, string, string) activitylog.Entry) {
+	if snapshot.UserID.IsNil() {
+		return
+	}
+	owner, err := users.Get(ctx, snapshot.UserID)
+	if err != nil || owner.Name == "" {
+		return
+	}
+	activity.Record(build(owner.ID, owner.Name, snapshot.DeviceName, snapshot.RemoteEndPoint))
 }
 
 func (sessions loginSessions) LogActivity(ctx context.Context, activity session.Activity) (session.Snapshot, error) {

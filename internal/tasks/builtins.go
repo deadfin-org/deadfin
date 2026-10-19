@@ -4,7 +4,9 @@ package tasks
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/deadfin-org/deadfin/internal/clock"
@@ -114,16 +116,19 @@ type BuiltinDeps struct {
 	LibraryScanRunning LibraryScanRunning
 	StoreMaintainer    StoreMaintainer
 	ActivityLogPruner  ActivityLogPruner
-	TranscodeCleaner   TranscodeCleaner
-	UserDataCleaner    UserDataCleaner
-	MetadataRefresher  MetadataRefresher
-	People             PeopleRefresher
-	AnimeSeeds         AnimeSeedRefresher
-	Trickplay          TrickplayRefresher
-	Clock              clock.Clock // injected clock for retention cutoffs (spec §3: all timing through clock.Clock)
-	LogPath            string
-	CachePath          string
-	TranscodePath      string // the manager-owned transcodes dir
+	// ActivityLogRetentionDays reads ServerConfiguration.ActivityLogRetentionDays
+	// at run time (CleanActivityLogTask.cs).
+	ActivityLogRetentionDays func() *int
+	TranscodeCleaner         TranscodeCleaner
+	UserDataCleaner          UserDataCleaner
+	MetadataRefresher        MetadataRefresher
+	People                   PeopleRefresher
+	AnimeSeeds               AnimeSeedRefresher
+	Trickplay                TrickplayRefresher
+	Clock                    clock.Clock // injected clock for retention cutoffs (spec §3: all timing through clock.Clock)
+	LogPath                  string
+	CachePath                string
+	TranscodePath            string // the manager-owned transcodes dir
 }
 
 // now returns the current time from the injected clock, or the real clock when
@@ -369,7 +374,19 @@ type cleanActivityLogRunnable struct{ deps BuiltinDeps }
 
 func (r *cleanActivityLogRunnable) Run(ctx context.Context, progress func(float64)) error {
 	progress(0)
-	before := r.deps.now().AddDate(0, 0, -activityRetentionDays)
+	retentionDays := activityRetentionDays
+	if r.deps.ActivityLogRetentionDays != nil {
+		configured := r.deps.ActivityLogRetentionDays()
+		if configured == nil || *configured < 0 {
+			value := "null"
+			if configured != nil {
+				value = strconv.Itoa(*configured)
+			}
+			return fmt.Errorf("activity log retention days must be at least 0; currently %s", value)
+		}
+		retentionDays = *configured
+	}
+	before := r.deps.now().AddDate(0, 0, -retentionDays)
 	if _, err := r.deps.ActivityLogPruner.Prune(ctx, before); err != nil {
 		return err
 	}

@@ -154,11 +154,23 @@ type Change struct {
 }
 
 // Options supplies dynamic watchdog policy and application callbacks. Hooks
-// run without the registry lock held.
+// run without the registry lock held. OnSessionStarted and OnSessionEnded
+// receive a copy of each session the registry creates or removes
+// (SessionManager.OnSessionStarted and OnSessionEnded), after the change
+// commits, on the goroutine that made the change.
 type Options struct {
 	InactiveSessionThreshold func() int
 	OnIdlePlayback           func(context.Context, Snapshot, PlaybackState) error
 	OnInactivePlayback       func(context.Context, Snapshot, PlaybackState) error
+	OnSessionStarted         func(context.Context, Snapshot)
+	OnSessionEnded           func(context.Context, Snapshot)
+}
+
+// lifecycleEvent is a session creation or removal that waits for the
+// registry lock to be released before its hook runs.
+type lifecycleEvent struct {
+	started  bool
+	snapshot Snapshot
 }
 
 // sessionKey preserves the boundary between independently case-folded client
@@ -201,6 +213,7 @@ type Manager struct {
 	changes        *events.Bus[Change]
 	controllers    map[string]int
 	progress       map[string]*progressWorker
+	lifecycle      []lifecycleEvent
 }
 
 type progressWorker struct {
@@ -265,7 +278,7 @@ func (manager *Manager) LogActivity(_ context.Context, activity Activity) (Snaps
 	now := manager.clock.Now()
 
 	manager.mu.Lock()
-	defer manager.mu.Unlock()
+	defer manager.unlockAndNotify()
 	if manager.closed {
 		return Snapshot{}, ErrClosed
 	}
@@ -345,7 +358,7 @@ func (manager *Manager) RecordAuthenticatedActivity(activity Activity) Authentic
 	now := manager.clock.Now()
 
 	manager.mu.Lock()
-	defer manager.mu.Unlock()
+	defer manager.unlockAndNotify()
 	if manager.closed {
 		return AuthenticatedActivityRejected
 	}
@@ -388,6 +401,7 @@ func (manager *Manager) createSessionLocked(key sessionKey, activity Activity, n
 	}
 	manager.byKey[key] = snapshot
 	manager.byID[snapshot.ID] = key
+	manager.lifecycle = append(manager.lifecycle, lifecycleEvent{started: true, snapshot: cloneSnapshot(*snapshot)})
 	return snapshot
 }
 
@@ -692,7 +706,7 @@ func (manager *Manager) DeviceProfile(client, deviceID string) ([]byte, bool) {
 // Remove drops the session identified by id.
 func (manager *Manager) Remove(id string) bool {
 	manager.mu.Lock()
-	defer manager.mu.Unlock()
+	defer manager.unlockAndNotify()
 	if manager.closed {
 		return false
 	}
@@ -704,7 +718,11 @@ func (manager *Manager) Remove(id string) bool {
 	return true
 }
 
+// removeLocked must run under a lock that unlockAndNotify releases.
 func (manager *Manager) removeLocked(key sessionKey, id string) {
+	if snapshot, found := manager.byKey[key]; found {
+		manager.lifecycle = append(manager.lifecycle, lifecycleEvent{snapshot: cloneSnapshot(*snapshot)})
+	}
 	delete(manager.byID, id)
 	delete(manager.byKey, key)
 	delete(manager.controllers, id)
@@ -717,7 +735,7 @@ func (manager *Manager) removeLocked(key sessionKey, id string) {
 // It ports the session loop of SessionManager.Logout(Device).
 func (manager *Manager) EndDeviceSessions(deviceID string) []string {
 	manager.mu.Lock()
-	defer manager.mu.Unlock()
+	defer manager.unlockAndNotify()
 	if manager.closed {
 		return nil
 	}
@@ -758,6 +776,23 @@ func (manager *Manager) Close() error {
 	manager.mu.Unlock()
 	manager.wg.Wait()
 	return manager.changes.Close(context.Background())
+}
+
+// unlockAndNotify releases the registry lock and then runs the session
+// lifecycle hooks for the creations and removals made under it.
+func (manager *Manager) unlockAndNotify() {
+	pending := manager.lifecycle
+	manager.lifecycle = nil
+	options := manager.options
+	manager.mu.Unlock()
+	for _, event := range pending {
+		switch {
+		case event.started && options.OnSessionStarted != nil:
+			options.OnSessionStarted(manager.ctx, event.snapshot)
+		case !event.started && options.OnSessionEnded != nil:
+			options.OnSessionEnded(manager.ctx, event.snapshot)
+		}
+	}
 }
 
 func (manager *Manager) publishChangeLocked(id string, kind ChangeKind, force bool) {

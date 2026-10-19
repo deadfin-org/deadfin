@@ -345,32 +345,35 @@ func (s *Identity) UpdateUser(ctx context.Context, user User) (err error) {
 // login also clears the persisted failed-attempt count; the caller still holds
 // the pre-reset user snapshot for the response produced by that authentication.
 func (s *Identity) RecordSuccessfulLogin(ctx context.Context, id dto.UUID, at time.Time) error {
-	return s.recordLoginAttempt(ctx, id, at, true)
+	_, err := s.recordLoginAttempt(ctx, id, at, true)
+	return err
 }
 
 // RecordFailedLogin increments the persisted failed-attempt count and locks an
-// account when its configured limit is reached.
-func (s *Identity) RecordFailedLogin(ctx context.Context, id dto.UUID) error {
+// account when its configured limit is reached. It reports whether this
+// attempt reached the limit and disabled the account (UserManager
+// IncrementInvalidLoginAttemptCount publishes UserLockedOutEventArgs then).
+func (s *Identity) RecordFailedLogin(ctx context.Context, id dto.UUID) (lockedOut bool, err error) {
 	return s.recordLoginAttempt(ctx, id, time.Time{}, false)
 }
 
-func (s *Identity) recordLoginAttempt(ctx context.Context, id dto.UUID, at time.Time, successful bool) (err error) {
+func (s *Identity) recordLoginAttempt(ctx context.Context, id dto.UUID, at time.Time, successful bool) (lockedOut bool, err error) {
 	tx, err := s.identityMutationTx(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer rollbackOnReturn(tx, &err)
 
 	var raw []byte
 	if err := tx.QueryRowContext(ctx, "SELECT policy FROM users WHERE id = "+s.p(1)+s.forUpdate(), s.idValue(id)).Scan(&raw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
+			return false, ErrNotFound
 		}
-		return userWriteError(err)
+		return false, userWriteError(err)
 	}
 	var policy map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &policy); err != nil {
-		return fmt.Errorf("decode user policy: %w", err)
+		return false, fmt.Errorf("decode user policy: %w", err)
 	}
 	if policy == nil {
 		policy = make(map[string]json.RawMessage)
@@ -388,11 +391,12 @@ func (s *Identity) recordLoginAttempt(ctx context.Context, id dto.UUID, at time.
 		}
 		if limit > 0 && attempts >= limit {
 			policy["IsDisabled"] = json.RawMessage("true")
+			lockedOut = true
 		}
 	}
 	encoded, err := json.Marshal(policy)
 	if err != nil {
-		return fmt.Errorf("encode user policy: %w", err)
+		return false, fmt.Errorf("encode user policy: %w", err)
 	}
 	query := "UPDATE users SET policy = " + s.p(1)
 	args := []any{encoded}
@@ -406,12 +410,15 @@ func (s *Identity) recordLoginAttempt(ctx context.Context, id dto.UUID, at time.
 	}
 	result, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
-		return userWriteError(err)
+		return false, userWriteError(err)
 	}
 	if err := changed(result); err != nil {
-		return err
+		return false, err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return lockedOut, nil
 }
 
 func policyInt(policy map[string]json.RawMessage, key string, fallback int) int {

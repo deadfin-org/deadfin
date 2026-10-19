@@ -19,13 +19,23 @@ import (
 	"github.com/deadfin-org/deadfin/internal/store"
 )
 
-// stubActivityLog is a test-only ActivityLogReader.
+// stubActivityLog is a test-only ActivityLogReader. Query loads the entries
+// into a process-local activitylog.Log and queries it.
 type stubActivityLog struct {
 	entries []activitylog.Entry
+	queries []activitylog.Query
 }
 
-func (s *stubActivityLog) Entries() []activitylog.Entry {
-	return s.entries
+func (s *stubActivityLog) Query(ctx context.Context, query activitylog.Query) (activitylog.Page, error) {
+	s.queries = append(s.queries, query)
+	log := activitylog.New(clock.NewFake(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
+	defer func() { _ = log.Close(context.Background()) }()
+	for _, entry := range s.entries {
+		if _, err := log.Write(ctx, entry); err != nil {
+			return activitylog.Page{}, err
+		}
+	}
+	return log.Query(ctx, query)
 }
 
 // stubUserResolver is a test-only ItemUserResolver.
@@ -107,15 +117,13 @@ func TestActivityLogEntriesEmptyLogReturnsEmptyResult(t *testing.T) {
 
 func TestActivityLogEntriesPagination(t *testing.T) {
 	log := &stubActivityLog{}
-	activityLog := activitylog.New(clock.NewFake(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
 	for range 150 {
-		_, _ = activityLog.Write(context.Background(), activitylog.Entry{
+		log.entries = append(log.entries, activitylog.Entry{
 			Name:     "Test Event",
 			Type:     "Test",
 			Severity: "Information",
 		})
 	}
-	log.entries = activityLog.Entries()
 
 	rt := router.New()
 	handlers.RegisterActivityLog(rt, log, nil)
@@ -138,6 +146,10 @@ func TestActivityLogEntriesPagination(t *testing.T) {
 	}
 	if result.TotalRecordCount != 150 {
 		t.Fatalf("TotalRecordCount = %d, want 150", result.TotalRecordCount)
+	}
+	// A request without text filters or sorts pages in the store.
+	if len(log.queries) != 1 || log.queries[0].Limit == nil || *log.queries[0].Limit != 100 || log.queries[0].StartIndex != 0 {
+		t.Fatalf("store queries = %+v; want one paged query with limit 100", log.queries)
 	}
 }
 

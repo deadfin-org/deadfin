@@ -99,6 +99,10 @@ func TestIdentityRemapUserIDsRewritesEveryReference(t *testing.T) {
 				t.Fatalf("create playlist: %v", err)
 			}
 
+			if _, err := store.NewActivityLogStore(stores).Insert(ctx, store.ActivityLogEntry{Name: "nana is online from phone", Type: "SessionStarted", UserID: nana, DateCreated: now, Severity: "Information"}); err != nil {
+				t.Fatalf("seed activity log: %v", err)
+			}
+
 			before := map[dto.UUID]map[string]int{nana: countUserReferences(t, stores, nana), kai: countUserReferences(t, stores, kai)}
 			for _, ref := range store.UserIDReferences() {
 				if before[nana][ref.String()]+before[kai][ref.String()] == 0 {

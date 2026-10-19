@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/deadfin-org/deadfin/internal/activitylog"
 	"github.com/deadfin-org/deadfin/internal/clock"
 	"github.com/deadfin-org/deadfin/internal/config"
 	"github.com/deadfin-org/deadfin/internal/dto"
@@ -77,6 +78,7 @@ type Service struct {
 	users         UserReader
 	sessions      *session.Manager
 	changes       *events.Bus[UserDataChanged]
+	activity      activitylog.Recorder
 }
 
 // NewService constructs the playback application service over its required
@@ -110,6 +112,13 @@ func NewService(c clock.Clock, configuration ConfigurationReader, items ItemStor
 	}
 }
 
+// WithActivity makes the service record playback start and stop entries in
+// the activity log. Call it before the service handles a report.
+func (service *Service) WithActivity(recorder activitylog.Recorder) *Service {
+	service.activity = recorder
+	return service
+}
+
 // Start records the report in the authenticated live session before updating
 // every user associated with that exact current session target.
 func (service *Service) Start(ctx context.Context, actor Actor, report Report) error {
@@ -127,6 +136,9 @@ func (service *Service) Start(ctx context.Context, actor Actor, report Report) e
 	}
 	if report.ItemID.IsNil() {
 		return nil
+	}
+	if err := service.recordPlayback(ctx, snapshot, report.ItemID, true); err != nil {
+		return err
 	}
 
 	facts, err := service.itemFacts(ctx, report.ItemID, report.MediaSourceID)
@@ -239,7 +251,13 @@ func (service *Service) Stop(ctx context.Context, actor Actor, report Report) er
 	if !found {
 		return session.ErrNotFound
 	}
-	if report.Failed || report.ItemID.IsNil() {
+	if report.ItemID.IsNil() {
+		return nil
+	}
+	if err := service.recordPlayback(ctx, snapshot, report.ItemID, false); err != nil {
+		return err
+	}
+	if report.Failed {
 		return nil
 	}
 
@@ -271,6 +289,54 @@ func (service *Service) Stop(ctx context.Context, actor Actor, report Report) er
 		service.publish(userID, facts.id)
 	}
 	return nil
+}
+
+// recordPlayback writes the PlaybackStartLogger or PlaybackStopLogger entry
+// for the displayed library item. An unknown item, theme media, and a user
+// that no longer exists write no entry, as upstream.
+func (service *Service) recordPlayback(ctx context.Context, snapshot session.Snapshot, itemID dto.UUID, started bool) error {
+	if service.activity == nil {
+		return nil
+	}
+	played, err := service.items.Get(ctx, itemID)
+	if err != nil {
+		if store.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if played.ExtraType != nil && (*played.ExtraType == item.ExtraTypeThemeSong || *played.ExtraType == item.ExtraTypeThemeVideo) {
+		return nil
+	}
+	user, err := service.users.Get(ctx, snapshot.UserID)
+	if err != nil {
+		if store.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	playbackItem := activitylog.PlaybackItem{
+		ID:         played.ID,
+		Name:       stringValue(played.Name),
+		SeriesName: stringValue(played.SeriesName),
+		Artists:    played.Values.Artists,
+		MediaType:  item.MediaTypeOf(played).String(),
+	}
+	if started {
+		service.activity.Record(activitylog.PlaybackStarted(user.ID, user.Name, playbackItem, snapshot.DeviceName))
+		return nil
+	}
+	if entry, ok := activitylog.PlaybackStopped(user.ID, user.Name, playbackItem, snapshot.DeviceName); ok {
+		service.activity.Record(entry)
+	}
+	return nil
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (service *Service) actorSnapshot(actor Actor) (session.Snapshot, bool) {

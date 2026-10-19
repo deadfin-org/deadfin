@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/deadfin-org/deadfin/internal/activitylog"
 	"github.com/deadfin-org/deadfin/internal/config"
 	"github.com/deadfin-org/deadfin/internal/dto"
 	"github.com/deadfin-org/deadfin/internal/session"
@@ -103,6 +104,9 @@ type LoginConfig struct {
 	// LegacyAuthorizationEnabled supplies the current persisted compatibility
 	// setting used while extracting anonymous password-login metadata.
 	LegacyAuthorizationEnabled func() bool
+	// Activity, when set, receives the AuthenticationSucceeded and
+	// AuthenticationFailed activity log entries.
+	Activity activitylog.Recorder
 }
 
 // Login authenticates credentials and creates their corresponding device token
@@ -114,6 +118,7 @@ type Login struct {
 	sessions                   LoginSessions
 	server                     config.ServerIdentity
 	legacyAuthorizationEnabled func() bool
+	activity                   activitylog.Recorder
 }
 
 // LoginRequest contains user credentials and the required client/device facts.
@@ -161,6 +166,14 @@ func NewLogin(config LoginConfig) *Login {
 		sessions:                   config.Sessions,
 		server:                     config.Server,
 		legacyAuthorizationEnabled: config.LegacyAuthorizationEnabled,
+		activity:                   config.Activity,
+	}
+}
+
+// record queues an activity log entry when the login has a recorder.
+func (login *Login) record(entry activitylog.Entry) {
+	if login.activity != nil {
+		login.activity.Record(entry)
 	}
 }
 
@@ -185,9 +198,12 @@ func (login *Login) Authenticate(ctx context.Context, request LoginRequest) (Log
 		return LoginResult{}, loginFailure(http.StatusInternalServerError, errors.New("login dependencies are required"))
 	}
 
+	// An unknown user name and a wrong password write AuthenticationFailed
+	// (SessionManager.AuthenticateNewSessionInternal); admission denials do not.
 	user, err := login.users.GetByName(ctx, request.Username)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
+			login.record(activitylog.AuthenticationFailed(request.Username, request.RemoteEndPoint))
 			return LoginResult{}, loginFailure(http.StatusUnauthorized, errLoginCredentials)
 		}
 		return LoginResult{}, loginFailure(http.StatusInternalServerError, err)
@@ -202,6 +218,7 @@ func (login *Login) Authenticate(ctx context.Context, request LoginRequest) (Log
 				return LoginResult{}, loginFailure(http.StatusInternalServerError, err)
 			}
 		}
+		login.record(activitylog.AuthenticationFailed(request.Username, request.RemoteEndPoint))
 		return LoginResult{}, loginFailure(http.StatusUnauthorized, errLoginCredentials)
 	}
 
@@ -296,6 +313,7 @@ func (login *Login) issueTokenAndLogActivity(ctx context.Context, user store.Use
 		}
 		return LoginResult{}, loginFailure(http.StatusInternalServerError, err)
 	}
+	login.record(activitylog.AuthenticationSucceeded(user.ID, user.Name, remoteEndPoint))
 	return LoginResult{
 		User:        user,
 		Session:     snapshot,

@@ -141,6 +141,10 @@ func providerFor(db *sql.DB, dialect Dialect, extra ...goose.ProviderOption) (*g
 	}
 	providerOptions := append([]goose.ProviderOption{
 		goose.WithDisableGlobalRegistry(true),
+		// The master and v0.4 lines number their migrations apart (master
+		// 00021 activity_log, v0.4 00019-00020 Live TV). A database that
+		// applied a master migration first then gets the lower v0.4 versions.
+		goose.WithAllowOutofOrder(true),
 		goose.WithGoMigrations(foundationMigration()),
 	}, extra...)
 	provider, err := goose.NewProvider(gooseDialect, db, migrations, providerOptions...)
