@@ -73,9 +73,11 @@ after it.
 
 ### 2. Catalog federation
 
-- Each site is the only writer of its own items. Each site keeps an
-  append-only **change feed** of its shared items with a sequence
-  number. Entries are signed with the site key.
+- Each shared library has one **owner** site at a time, and the owner is
+  the only writer of the library's items. Each site keeps an append-only
+  **change feed** of the libraries it owns, with a sequence number. Each
+  entry names the library's ownership epoch (see
+  [Ownership](#ownership-and-transfer)) and is signed with the site key.
 - A peer pulls the feed from its last cursor. It pulls on a timer and
   when the origin sends a push hint over the peer connection. The first
   pull is a full snapshot.
@@ -84,9 +86,10 @@ after it.
   and Next Up run as local queries. A slow or offline peer does not slow
   the UI.
 - Images are fetched from the origin on first request and cached.
-- **Item identity.** A remote item gets a deterministic local ID:
-  `UUIDv5(siteId, remoteItemId)`. The ID survives resyncs, so client
-  caches and playlists stay valid.
+- **Item identity.** A shared library gets a pool-wide `libraryId` when
+  it is first shared. A remote item gets a deterministic local ID:
+  `UUIDv5(libraryId, remoteItemId)`. The ID survives resyncs and
+  ownership transfers, so client caches and playlists stay valid.
 - **Users stay home.** A user signs in to the home site only. Watch
   state, resume points, favorites, and playlists stay on the home site.
   The home site sends a peer a short-lived signed claim,
@@ -152,10 +155,46 @@ state, and rebuilds.
   - *Healthy*: replica count matches the policy.
   - *Degraded*: fewer replicas than the policy. The owner schedules a
     rebuild.
-  - *Orphaned*: the owner site has been unreachable past a threshold.
-    Replicas keep serving. An admin of a replica site can **adopt** the
-    library, which moves ownership to that site and signs the change
-    into the feed.
+  - *Orphaned*: the owner's lease has expired (below). Replicas keep
+    serving. Ownership moves only by a transfer record.
+
+### Ownership and transfer
+
+A partition and a dead owner look the same from outside. Ownership
+therefore moves only on proof that the owner authorized it, confirmed by
+more than one site.
+
+- **Epochs.** Each shared library carries `(libraryId, epoch, owner)`.
+  Every feed entry names its epoch. A peer accepts entries only from the
+  highest epoch it has seen for the library. The epoch is a fencing
+  token: a former owner's writes stop counting once a higher epoch
+  exists.
+- **Lease.** The owner signs a lease into its feed on a fixed interval,
+  for example every 15 minutes with a 24-hour expiry. Peers use the same
+  leases for health tracking.
+- **Succession grant.** While healthy, the owner signs a grant that names
+  the heir sites and a minimum orphan time, for example 7 days. Without a
+  grant, the library has no heirs.
+- **Transfer record.** An heir starts a transfer to `epoch + 1` after the
+  lease has expired for the minimum orphan time. The record is valid
+  only with:
+  1. the owner's succession grant that names the heir;
+  2. signed acknowledgements from a majority of the library's replica
+     sites. Each witness confirms that it also cannot reach the owner and
+     that the newest lease it holds has expired.
+
+  Peers verify the grant signature and the witness count. An heir with
+  only a broken link of its own cannot collect a majority.
+- **The former owner returns.** It reads the higher epoch, marks its copy
+  of the library read-only, and becomes a replica. Items it added during
+  the partition go to the new owner as proposals; files are
+  content-addressed, so a proposal for a file the pool already holds
+  costs no transfer. Ownership moves back only by a new transfer record
+  that the current owner signs.
+- **Fork.** An admin can always copy a library they hold replicas of
+  into a new library with a new `libraryId`, owned by their site. Peers
+  subscribe to the fork by choice. A fork leaves the original library and
+  its epoch unchanged.
 
 ## Upstream compatibility
 
@@ -175,8 +214,8 @@ state, and rebuilds.
    peers.
 3. Merge by provider ID into multiple `MediaSources`, peer health, and
    failover. Proxy playback for clients that cannot reach a peer.
-4. Replication policies, capacity offers, block transfer, rebuild,
-   adopt.
+4. Replication policies, capacity offers, block transfer, rebuild.
+5. Ownership leases, succession grants, witnessed transfer, fork.
 
 ## Open questions
 
@@ -199,6 +238,10 @@ state, and rebuilds.
 7. **Legal exposure.** Streaming to a peer and copying files to a peer
    are different acts. Replication is opt-in per library and per peer.
    Does a site also need a pool-wide switch to turn it off?
+8. **Witnesses in small pools.** With `replicas: 2`, the heir is often
+   the only replica site, so it would witness its own transfer. Should
+   every site that subscribes to the library count as a witness, with a
+   floor of two witnesses other than the heir?
 
 [meta118]: https://github.com/jellyfin/jellyfin-meta/discussions/118
 [pr16494]: https://github.com/jellyfin/jellyfin/pull/16494
