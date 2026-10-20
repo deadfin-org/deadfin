@@ -104,16 +104,54 @@ after it.
 - Each site's copy becomes one entry in `MediaSources`. Jellyfin already
   models alternate versions this way, so clients show a version picker
   with no change.
-- `PlaybackInfo` ranks the reachable sources:
-  1. a local file;
-  2. a peer source by redirect (`302` plus a stream token);
-  3. a peer source through the home site (proxy).
+- `PlaybackInfo` prefers a local file, then a peer source in the mode
+  that [playback routing](#playback-routing) selects. The home site
+  tracks peer health. It leaves out a source on a peer that does not
+  answer, so playback fails over to the next copy with no user action.
 
-  The home site tracks peer health. It leaves out a source on a peer
-  that does not answer, so playback fails over to the next copy with no
-  user action.
-- The origin site makes the transcode decision. The home site forwards
-  the client's device profile with the request.
+### Playback routing
+
+The client talks to its home site only, by default. The home site picks
+one of three modes for each playback of a peer source.
+
+1. **Pull-through.** The home site fetches the original file from the
+   peer in blocks, the blocks at the play position first, so a seek
+   starts at once. The home site makes the transcode decision and does
+   any transcoding. The peer reads disk and uploads only. The peer sees
+   "site X read file F", with no user and no client address. The fetched
+   blocks stay in the home site's replica cache as a partial replica (see
+   [Replication](#4-replication)). Against stock Jellyfin, pull-through
+   uses HTTP `Range` requests on the static stream.
+2. **Remote transcode with relay.** The peer transcodes to a bitrate that
+   fits the link, and the home site relays the stream to the client. The
+   home site forwards the client's device profile with the request. The
+   peer sees the same as in pull-through.
+3. **Direct redirect.** The home site returns `302` to the peer with a
+   stream token, as in the upstream proposal. The client streams from the
+   peer. This mode skips the home site's uplink for a user away from
+   home. The peer sees the client address. A peer admin turns it on per
+   peer, and the client must reach the peer.
+
+**Selection.** The home site uses pull-through when the source bitrate
+fits under the peer's outbound cap and under the measured peer-to-home
+throughput. Otherwise it asks the peer for a transcode at a bitrate under
+both. When the peer has no transcode slot free, the home site tries the
+next source, and fails the playback when no source qualifies.
+
+**Levers.** Each site sets the limits on what it sends to peers. Each
+limit has a site default and a per-peer override.
+
+| Lever | Effect |
+|---|---|
+| `peerStreamBitrateLimit` | Highest bitrate of one stream sent to a peer. A source above it plays only through a transcode, so a high-bitrate 4K remux leaves the site as a transcode. Same model as upstream `RemoteClientBitrateLimit` |
+| `peerEgressLimit` | Total bitrate of all streams sent to peers at once |
+| `peerMaxStreams` | Streams sent to peers at once |
+| `peerMaxTranscodes` | Transcodes run for peers at once, apart from the site's own users |
+| `peerDirectRedirect` | Allows mode 3 for a peer |
+| `replicationRateLimit`, `replicationWindow` | Bulk replication traffic, apart from playback |
+
+The home site sets `peerIngressLimit`, the total bitrate it pulls from
+all peers at once.
 
 ### 4. Replication
 
@@ -201,19 +239,22 @@ more than one site.
 - Layers 1 to 3 use the upstream external-item contract: external items,
   `302` redirects, and `StreamToken`. A Deadfin site can then consume a
   stock Jellyfin server that runs the upstream remote-library plugin, and
-  serve one.
-- Layer 4, the pairing protocol, and multi-site source merging are
+  serve one. Against stock Jellyfin, pull-through uses the static stream
+  with `Range` requests.
+- Layer 4, the pairing protocol, home-mediated playback modes, the peer
+  levers, and multi-site source merging are
   Deadfin extensions between Deadfin sites. Each gets a row in
   `docs/divergences.md` when it lands.
 
 ## Phases
 
-1. Pairing, one read-only shared library from one peer, redirect
-   playback. Upstream-compatible stream tokens.
+1. Pairing, one read-only shared library from one peer, pull-through
+   over HTTP `Range`, and the outbound bitrate cap.
 2. Change feed with push hints, deterministic IDs, user claims, several
-   peers.
+   peers. Remote transcode with relay, and the remaining levers.
 3. Merge by provider ID into multiple `MediaSources`, peer health, and
-   failover. Proxy playback for clients that cannot reach a peer.
+   failover. Direct redirect as an opt-in mode with upstream-compatible
+   stream tokens.
 4. Replication policies, capacity offers, block transfer, rebuild.
 5. Ownership leases, succession grants, witnessed transfer, fork.
 
@@ -222,12 +263,12 @@ more than one site.
 1. **Redirects in clients.** Which clients follow a `302` to another
    host for direct play and for HLS, and keep the stream token? AVPlayer
    (Swiftfin, Infuse), ExoPlayer (Findroid, Android TV), and jellyfin-web
-   need a test pass before phase 1 picks redirect or proxy as the
-   default.
+   need a test pass before direct redirect ships. The home-mediated modes
+   work with every client.
 2. **Merge rules.** Is a provider-ID match strong enough? Editions
    (director's cut), 3D, and extras need a rule.
-3. **Remote transcoding load.** Should a site cap the transcodes it runs
-   for peers, separately from its own users?
+3. **Lever defaults.** What default `peerStreamBitrateLimit` suits a
+   household uplink: a fixed value, or a share of the measured upload?
 4. **Bandwidth.** One 60 GB remux at 10 Mbit/s upload takes about 13
    hours. Are per-library policies plus sampled dedup enough, or does
    replication need a "transcoded replica" mode (for example, a 1080p
