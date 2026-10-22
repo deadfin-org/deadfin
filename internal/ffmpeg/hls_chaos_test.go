@@ -117,6 +117,8 @@ func newHLSChaosFixture(t *testing.T) hlsChaosFixture {
 		directory: filepath.Join(root, "transcodes"),
 	}
 	fixture.ffmpegPath = hlsChaosFakeFFmpeg(t)
+	// Runs before the temp directory is removed, also after t.Fatal.
+	t.Cleanup(fixture.killHelpers)
 	return fixture
 }
 
@@ -144,6 +146,7 @@ func (f hlsChaosFixture) request(label, session string, ignoreQ bool, subtitle s
 	pattern := filepath.Join(f.directory, label+"%d.ts")
 	args := []string{
 		"--chaos-root=" + f.root,
+		"--chaos-owner=" + strconv.Itoa(os.Getpid()),
 		"--chaos-label=" + label,
 	}
 	if ignoreQ {
@@ -384,12 +387,35 @@ func (f hlsChaosFixture) waitForProcessGroupExit(t *testing.T, leader int) {
 	}
 }
 
+// killHelpers kills every helper process group the fixture started. The
+// helpers run in their own process groups, so they outlive a test that stops
+// before manager cleanup.
+func (f hlsChaosFixture) killHelpers() {
+	for _, name := range []string{"leaders", "children"} {
+		data, err := os.ReadFile(filepath.Join(f.root, name))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Fields(string(data)) {
+			if pid, err := strconv.Atoi(line); err == nil && pid > 0 {
+				_ = syscall.Kill(-pid, syscall.SIGKILL)
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	}
+}
+
+// hlsChaosMaxSegments bounds the segments one helper writes. The test reads
+// segment 0 and waits for two complete playlist entries.
+const hlsChaosMaxSegments = 8
+
 func hlsChaosFakeFFmpeg(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "ffmpeg")
 	body := `#!/bin/sh
 set -eu
 root=
+owner=
 label=
 pattern=
 playlist=
@@ -397,6 +423,7 @@ ignore_q=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --chaos-root=*) root=${1#--chaos-root=} ;;
+    --chaos-owner=*) owner=${1#--chaos-owner=} ;;
     --chaos-label=*) label=${1#--chaos-label=} ;;
     --chaos-ignore-q) ignore_q=1 ;;
     -hls_segment_filename) shift; pattern=$1 ;;
@@ -405,18 +432,24 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 [ -n "$root" ]
+[ -n "$owner" ]
 [ -n "$label" ]
 [ -n "$pattern" ]
 [ -n "$playlist" ]
+# Every loop ends when the test process is gone.
+alive() { kill -0 "$owner" 2>/dev/null; }
 printf '%s\n' "$$" >> "$root/leaders"
 (
   trap '' TERM
-  while :; do sleep 1; done
+  while alive; do sleep 1; done
 ) &
 child=$!
 printf '%s\n' "$child" >> "$root/children"
 : > "$root/started.$label"
-while [ ! -e "$root/release.$label" ]; do sleep 0.005; done
+while [ ! -e "$root/release.$label" ]; do
+  alive || exit 0
+  sleep 0.005
+done
 trap 'exit 0' USR1
 (
   while IFS= read -r command; do
@@ -429,14 +462,16 @@ trap 'exit 0' USR1
 ) &
 index=0
 printf '#EXTM3U\n' > "$playlist"
-while :; do
+while [ "$index" -lt @MAX_SEGMENTS@ ] && alive; do
   segment=$(printf "$pattern" "$index")
   printf '%s:%s\n' "$label" "$index" > "$segment"
   printf '#EXTINF:4,\n%s\n' "$(basename "$segment")" >> "$playlist"
   index=$((index + 1))
   sleep 0.005
 done
+while alive; do sleep 0.05; done
 `
+	body = strings.ReplaceAll(body, "@MAX_SEGMENTS@", strconv.Itoa(hlsChaosMaxSegments))
 	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
