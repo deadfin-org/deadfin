@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-//go:build !linux
+//go:build !unix
 
 package main
 
@@ -9,11 +9,10 @@ import (
 	"os"
 )
 
-// PR_SET_CHILD_SUBREAPER is Linux-only, and so is the CI runner this wrapper
-// exists for. This stub keeps `go build ./...` and `go vet ./...` working on a
-// developer Darwin checkout: without a file for the non-Linux case, the
+// The wrapper needs Unix process groups. This stub keeps `go build ./...` and
+// `go vet ./...` working on other systems: without a file for that case, the
 // package has no buildable sources and ./... fails to load.
 func main() {
-	fmt.Fprintln(os.Stderr, "subreaper: Linux-only (PR_SET_CHILD_SUBREAPER); run the command directly on this platform")
+	fmt.Fprintln(os.Stderr, "subreaper: Unix-only; run the command directly on this platform")
 	os.Exit(1)
 }

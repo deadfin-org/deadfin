@@ -51,8 +51,10 @@ build:
 build-identity:
 	staging=$$(mktemp -d) && go run ./tools/buildinfo-gen -o "$$staging" && go build -overlay "$$staging/overlay.json" -o deadfin ./cmd/deadfin
 
+# test runs the suite with a private TMPDIR that is removed afterwards, and
+# kills processes the tests leave behind (tools/ci/subreaper).
 test:
-	go test ./...
+	go run ./tools/ci/subreaper go test ./...
 
 # skia installs the pinned SkiaSharp native library at the fixed dlopen path
 # that the Linux image tests use. tools/skia-fetch downloads the NuGet package
