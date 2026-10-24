@@ -182,16 +182,26 @@ func itemQueryAccessTagClause(relation *itemQueryIDRelation, alias string, tags 
 	if len(cleanTags) == 0 {
 		return ""
 	}
-	kind := relation.argument("tag")
-	values := make([]string, len(cleanTags))
-	for index, clean := range cleanTags {
-		values[index] = relation.argument(clean)
+	// tagged is the uncorrelated set of items that carry a matching tag. Each
+	// path tests membership in it, so the database builds the set once instead
+	// of scanning item_value_map for every row (#761). The IS NOT NULL guards
+	// keep a NULL series or top parent from turning the whole test to NULL.
+	tagged := func() string {
+		kind := relation.argument("tag")
+		values := make([]string, len(cleanTags))
+		for index, clean := range cleanTags {
+			values[index] = relation.argument(clean)
+		}
+		return "SELECT policy_value_map.item_id FROM item_value_map AS policy_value_map JOIN item_values AS policy_value ON policy_value.id = policy_value_map.value_id WHERE policy_value.kind = " + kind + " AND policy_value.clean_value IN (" + strings.Join(values, ", ") + ")"
 	}
-	prefix := "EXISTS"
+	matches := "(" + alias + ".id IN (" + tagged() + ")" +
+		" OR (" + alias + ".series_id IS NOT NULL AND " + alias + ".series_id IN (" + tagged() + "))" +
+		" OR (" + alias + ".top_parent_id IS NOT NULL AND " + alias + ".top_parent_id IN (" + tagged() + "))" +
+		" OR EXISTS (SELECT 1 FROM ancestors AS policy_tag_ancestor WHERE policy_tag_ancestor.item_id = " + alias + ".id AND policy_tag_ancestor.ancestor_id IN (" + tagged() + ")))"
 	if exclude {
-		prefix = "NOT EXISTS"
+		return "NOT " + matches
 	}
-	return prefix + " (SELECT 1 FROM item_value_map AS policy_value_map JOIN item_values AS policy_value ON policy_value.id = policy_value_map.value_id WHERE (policy_value_map.item_id = " + alias + ".id OR policy_value_map.item_id = " + alias + ".series_id OR policy_value_map.item_id = " + alias + ".top_parent_id OR EXISTS (SELECT 1 FROM ancestors AS policy_tag_ancestor WHERE policy_tag_ancestor.item_id = " + alias + ".id AND policy_tag_ancestor.ancestor_id = policy_value_map.item_id)) AND policy_value.kind = " + kind + " AND policy_value.clean_value IN (" + strings.Join(values, ", ") + "))"
+	return matches
 }
 
 func itemQueryNonEmptyClauses(clauses []string) []string {
