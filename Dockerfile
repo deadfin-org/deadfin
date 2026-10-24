@@ -4,7 +4,7 @@ ARG SOURCE_DATE_EPOCH
 # deadfin-web, the default web client. The image index is pinned by digest;
 # Renovate opens a bump pull request for each deadfin-web release. Release
 # order: tag deadfin-web, merge the bump, then tag deadfin (docs/releases.md).
-ARG DEADFIN_WEB_IMAGE=ghcr.io/deadfin-org/deadfin-web:v0.3.0-rc.6@sha256:14a0d5e638c9bc8389d5a969756faac530f685a0aa0deb82fb9a8e437ab4cf2f
+ARG DEADFIN_WEB_IMAGE=ghcr.io/deadfin-org/deadfin-web:v0.3.0-rc.7@sha256:4449316474ab5366d4b6bed60902828354fd4c6b534bbd67d04f649b41462208
 FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c AS build
 ARG TARGETOS
 ARG TARGETARCH
