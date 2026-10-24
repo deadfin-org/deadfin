@@ -149,6 +149,12 @@ func connectionConfig(dsn, schema string) (*pgx.ConnConfig, error) {
 	if schema != "" {
 		config.RuntimeParams["search_path"] = pgx.Identifier{schema}.Sanitize()
 	}
+	// Deadfin's queries are short and run often. JIT compilation adds about
+	// 0.8 s to a large item query and never pays back, so sessions turn it
+	// off unless the DSN sets jit.
+	if _, ok := config.RuntimeParams["jit"]; !ok {
+		config.RuntimeParams["jit"] = "off"
+	}
 	return config, nil
 }
 
