@@ -4,7 +4,6 @@ package ws
 
 import (
 	"context"
-	"runtime"
 	"testing"
 	"time"
 
@@ -24,51 +23,64 @@ func TestPeriodicFeedHonorsDuePeriodForceAndStopOnFakeClock(t *testing.T) {
 
 	feed.start(periodicInterval{due: 100 * time.Millisecond, period: time.Second})
 	fake.Advance(99 * time.Millisecond)
-	assertNoPeriodicMessage(t, sent)
+	assertNoPeriodicMessage(t, feed, sent)
 	fake.Advance(time.Millisecond)
-	assertPeriodicMessage(t, sent, MessageSessions)
+	assertPeriodicMessage(t, feed, sent, MessageSessions)
 
 	feed.changed(false)
-	assertNoPeriodicMessage(t, sent)
+	assertNoPeriodicMessage(t, feed, sent)
 	fake.Advance(999 * time.Millisecond)
-	assertNoPeriodicMessage(t, sent)
+	assertNoPeriodicMessage(t, feed, sent)
 	fake.Advance(time.Millisecond)
-	assertPeriodicMessage(t, sent, MessageSessions)
+	assertPeriodicMessage(t, feed, sent, MessageSessions)
 
 	feed.changed(true)
-	assertPeriodicMessage(t, sent, MessageSessions)
+	assertPeriodicMessage(t, feed, sent, MessageSessions)
 	feed.stop()
 	fake.Advance(10 * time.Second)
-	assertNoPeriodicMessage(t, sent)
+	assertNoPeriodicMessage(t, feed, sent)
 
 	cancel()
 	feed.wait()
 }
 
-func assertPeriodicMessage(t *testing.T, messages <-chan MessageType, want MessageType) {
+// settlePeriodicFeed returns after the run loop finishes its current
+// iteration. A send resets the timer after the message leaves, so the test
+// must not advance the fake clock before that reset.
+func settlePeriodicFeed(t *testing.T, feed *periodicFeed) {
 	t.Helper()
-	for range 10_000 {
-		select {
-		case got := <-messages:
-			if got != want {
-				t.Fatalf("periodic message = %q, want %q", got, want)
-			}
-			return
-		default:
-			runtime.Gosched()
-		}
+	ack := make(chan struct{})
+	select {
+	case feed.control <- periodicControl{ack: ack}:
+	case <-feed.done:
+		t.Fatal("periodic feed stopped")
 	}
-	t.Fatalf("periodic message = none, want %q", want)
+	select {
+	case <-ack:
+	case <-feed.done:
+		t.Fatal("periodic feed stopped")
+	}
 }
 
-func assertNoPeriodicMessage(t *testing.T, messages <-chan MessageType) {
+func assertPeriodicMessage(t *testing.T, feed *periodicFeed, messages <-chan MessageType, want MessageType) {
 	t.Helper()
-	for range 100 {
-		select {
-		case got := <-messages:
-			t.Fatalf("unexpected periodic message %q", got)
-		default:
-			runtime.Gosched()
+	select {
+	case got := <-messages:
+		if got != want {
+			t.Fatalf("periodic message = %q, want %q", got, want)
 		}
+	case <-feed.done:
+		t.Fatalf("periodic message = none, want %q", want)
+	}
+	settlePeriodicFeed(t, feed)
+}
+
+func assertNoPeriodicMessage(t *testing.T, feed *periodicFeed, messages <-chan MessageType) {
+	t.Helper()
+	settlePeriodicFeed(t, feed)
+	select {
+	case got := <-messages:
+		t.Fatalf("unexpected periodic message %q", got)
+	default:
 	}
 }
