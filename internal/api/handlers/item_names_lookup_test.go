@@ -145,7 +145,7 @@ func TestNamedEntityImageRoutesServeEntityImage(t *testing.T) {
 	artifact := writeArtifact(t, "JPEG-BYTES")
 	renderer := &fakeRenderer{result: imageserve.Result{CachePath: artifact, ContentType: "image/jpeg"}}
 	rt := router.New()
-	handlers.RegisterImages(rt, fixture.items, renderer, path.VirtualPathExpander{})
+	handlers.RegisterImages(rt, fixture.items, renderer, path.VirtualPathExpander{}, nil, nil)
 
 	for _, tc := range []struct {
 		path       string

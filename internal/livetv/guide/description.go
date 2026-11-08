@@ -47,14 +47,42 @@ func readDescriptionEpisode(p XMLTVProgramme) XMLTVProgramme {
 	if err != nil {
 		return p
 	}
+	if season > maxDescriptionSeason || episode > maxDescriptionEpisode {
+		return p
+	}
 	p.HasEpisode = true
 	p.Series = &season
 	p.Episode = &episode
-	if title := strings.TrimSpace(match[3]); title != "" {
-		p.EpisodeTitle = &title
+	remainder := strings.TrimSpace(match[3])
+	overview := strings.TrimSpace(rest)
+	if overview == "" && remainder != "" && !looksLikeTitle(remainder) {
+		// Single-line form with a synopsis after the numbers.
+		p.Description = &remainder
+		return p
 	}
-	if overview := strings.TrimSpace(rest); overview != "" {
+	if remainder != "" {
+		p.EpisodeTitle = &remainder
+	}
+	if overview != "" {
 		p.Description = &overview
 	}
 	return p
+}
+
+// Numbers above these limits are not season and episode numbers.
+const (
+	maxDescriptionSeason  = 1000
+	maxDescriptionEpisode = 9999
+)
+
+// maxTitleWords is the longest text that counts as an episode title.
+const maxTitleWords = 8
+
+// looksLikeTitle reports whether s is short and has no sentence end or list
+// separator before its last character.
+func looksLikeTitle(s string) bool {
+	if len(strings.Fields(s)) > maxTitleWords {
+		return false
+	}
+	return !strings.ContainsAny(s[:len(s)-1], ".!?;…")
 }

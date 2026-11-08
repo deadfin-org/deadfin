@@ -25,10 +25,29 @@ newest release or release candidate. `:latest` follows the newest release.
 
 ### Fixed
 
+- A remote image that failed to download (for example an IPTV channel logo)
+  returned an unlogged 500 and was downloaded again on every request. The
+  server now logs the failure with the host and status. A source that answers
+  404 or 403 removes the image from the item, as in Jellyfin, so clients stop
+  asking; the request answers 404. Other failures answer 503, and the server
+  does not fetch that URL again for one hour (D-127). Image downloads send the
+  Deadfin User-Agent (#886).
 - The Jellyfin import guide said that a scan starts with the server. The
   server does not scan at start; as in Jellyfin, the scheduled Scan Media
   Library task first runs one hour after start. Step 5 now says to start the
   scan by hand, and a test pins the schedule (#876).
+- `GET /Search/Hints` is about three times faster with a large Live TV
+  guide (#885). With 11,000 channels and 400,000 programmes, the candidate
+  search takes 46 ms instead of 145–227 ms on SQLite, and 44 ms instead of
+  64–110 ms on PostgreSQL. A short term that matches much of the guide
+  takes 199 ms instead of 750 ms on SQLite. On PostgreSQL, a search by a
+  user who is not an administrator takes about 120 ms instead of 300–440
+  ms. The search tests the name first, matches the clean name as a
+  substring (as upstream does), and scores the matches in the same pass.
+- Live TV: in the single-line description form `SNN ENN text`, a long or
+  sentence-like text is no longer the episode title. EpisodeTitle stays
+  empty and Overview is the text without the `SNN ENN` prefix. A season
+  above 1000 or an episode above 9999 is not read as an episode (#884).
 - A transcode worker job now survives a server restart when a client asks
   for the next segment before the worker reconnects (#861). Before, the
   request started a new transcode for the playlist, and the server refused

@@ -170,3 +170,23 @@ func TestSetImageRejectsUnknownMediaTypeAndMissingItem(t *testing.T) {
 		t.Fatalf("SetImage(no media type) = %v; want ErrUnsupportedImage", err)
 	}
 }
+
+func TestRemoveRemoteImageMatchesPathAndReindexes(t *testing.T) {
+	f := newImageFixture(t)
+	movie := id(34)
+	const gone = "https://cdn.example/gone.jpg"
+	mustUpsert(t, f.items, item.Item{ID: movie, Kind: item.KindMovie, Name: text("Movie"), Path: text("/media/movies/m.mkv"),
+		ImageInfos: []item.ImageInfo{
+			{Type: item.ImageTypeBackdrop, Index: 0, Path: gone},
+			{Type: item.ImageTypeBackdrop, Index: 1, Path: "https://cdn.example/kept.jpg"},
+		}})
+	for range 2 {
+		if err := f.service.RemoveRemoteImage(t.Context(), movie, item.ImageTypeBackdrop, gone); err != nil {
+			t.Fatalf("RemoveRemoteImage: %v", err)
+		}
+	}
+	got := imagesOf(t, f.items, movie, item.ImageTypeBackdrop)
+	if len(got) != 1 || got[0].Path != "https://cdn.example/kept.jpg" || got[0].Index != 0 {
+		t.Fatalf("backdrops after two removals = %+v; want only the kept image at index 0", got)
+	}
+}

@@ -118,7 +118,7 @@ func TestImageServingAcceptance(t *testing.T) {
 				}
 				info := corpusImageInfo(t, testCase)
 				rt := router.New()
-				handlers.RegisterImages(rt, fakeImageReader{infos: []item.ImageInfo{info}}, service, path.VirtualPathExpander{})
+				handlers.RegisterImages(rt, fakeImageReader{infos: []item.ImageInfo{info}}, service, path.VirtualPathExpander{}, nil, nil)
 
 				recorder := httptest.NewRecorder()
 				rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, testCase.Request.Capture.Path, nil))
@@ -139,7 +139,7 @@ func TestImageServingAcceptance(t *testing.T) {
 		testCase := findCase(t, manifest, "jpeg-landscape-width-320")
 		info := corpusImageInfo(t, testCase)
 		rt := router.New()
-		handlers.RegisterImages(rt, fakeImageReader{infos: []item.ImageInfo{info}}, imageserve.New(processor, nil), path.VirtualPathExpander{})
+		handlers.RegisterImages(rt, fakeImageReader{infos: []item.ImageInfo{info}}, imageserve.New(processor, nil), path.VirtualPathExpander{}, nil, nil)
 
 		recorder := httptest.NewRecorder()
 		rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, testCase.Request.Capture.Path, nil))
@@ -169,7 +169,7 @@ func TestImageServingAcceptance(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read fixture: %v", err)
 		}
-		remoteCache := imageserve.NewRemoteCache(corpusDownloader{body: fixture}, t.TempDir())
+		remoteCache := imageserve.NewRemoteCache(corpusDownloader{body: fixture}, t.TempDir(), imageserve.RemoteCacheOptions{})
 		service := imageserve.New(processor, remoteCache)
 
 		// A remote provider URL in ImageInfo.Path (no local file) must be
@@ -178,7 +178,7 @@ func TestImageServingAcceptance(t *testing.T) {
 		const remoteURL = "https://image.tmdb.org/t/p/original/poster.jpg"
 		reader := fakeImageReader{infos: []item.ImageInfo{{Type: item.ImageTypePrimary, Index: 0, Path: remoteURL}}}
 		rt := router.New()
-		handlers.RegisterImages(rt, reader, service, path.VirtualPathExpander{})
+		handlers.RegisterImages(rt, reader, service, path.VirtualPathExpander{}, nil, nil)
 
 		recorder := httptest.NewRecorder()
 		rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images/Primary?width=320&quality=90&format=jpeg", nil))

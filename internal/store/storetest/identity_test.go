@@ -381,6 +381,9 @@ func (postgresReturningDialect) EscapeLike(value string) string { return value }
 func (postgresReturningDialect) SearchClause(column, placeholder string) string {
 	return column + " = " + placeholder
 }
+func (postgresReturningDialect) ContainsClause(column, placeholder string) string {
+	return column + " = " + placeholder
+}
 
 type postgresReturningDriver struct{}
 

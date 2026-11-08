@@ -38,7 +38,7 @@ func TestItemImageListingVirtualPathExpansion(t *testing.T) {
 		{Type: item.ImageTypeBackdrop, Path: storedPath, Index: 0},
 	}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, nil, expander)
+	handlers.RegisterImages(rt, reader, nil, expander, nil, nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images", nil)
@@ -89,7 +89,7 @@ func TestItemImageRenderVirtualPathExpansion(t *testing.T) {
 		{Type: item.ImageTypePrimary, Path: storedPath, Index: 0},
 	}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, renderer, expander)
+	handlers.RegisterImages(rt, reader, renderer, expander, nil, nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images/Primary", nil)
@@ -119,7 +119,7 @@ func TestItemImageListingNoTokenUnchanged(t *testing.T) {
 		{Type: item.ImageTypePrimary, Path: storedPath, Index: 0},
 	}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, nil, expander)
+	handlers.RegisterImages(rt, reader, nil, expander, nil, nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images", nil)
@@ -157,7 +157,7 @@ func TestItemImageListingPreservesImageTag(t *testing.T) {
 		{Type: item.ImageTypePrimary, Path: storedPath, Index: 0},
 	}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, nil, expander)
+	handlers.RegisterImages(rt, reader, nil, expander, nil, nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images", nil)
@@ -223,7 +223,7 @@ func TestItemImageRenderPreservesRawTag(t *testing.T) {
 	}}
 	renderer := &fileRenderer{}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, renderer, expander)
+	handlers.RegisterImages(rt, reader, renderer, expander, nil, nil)
 
 	// Exercise the listing endpoint: GET /Items/{itemId}/Images.
 	listRec := httptest.NewRecorder()

@@ -30,6 +30,10 @@ type Dialect interface {
 	TextCollation(expression string) string
 	EscapeLike(value string) string
 	SearchClause(column, placeholder string) string
+	// ContainsClause tests that column holds the placeholder text as a
+	// literal, case-sensitive substring. It ports the EF Core translation of
+	// string.Contains.
+	ContainsClause(column, placeholder string) string
 }
 
 // Maintainer runs backend-specific database maintenance (SQLite: PRAGMA

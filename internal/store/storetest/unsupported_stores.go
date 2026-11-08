@@ -30,12 +30,13 @@ func (unsupportedStores) Close() error           { return nil }
 
 type unsupportedDialect struct{}
 
-func (unsupportedDialect) Placeholder(int) string             { return "?" }
-func (unsupportedDialect) Boolean(bool) string                { return "0" }
-func (unsupportedDialect) TimeValue(t time.Time) any          { return t }
-func (unsupportedDialect) ScanTime(v any) (time.Time, error)  { return time.Time{}, nil }
-func (unsupportedDialect) Random() string                     { return "RANDOM()" }
-func (unsupportedDialect) NullsLast() string                  { return "" }
-func (unsupportedDialect) TextCollation(string) string        { return "" }
-func (unsupportedDialect) EscapeLike(string) string           { return "" }
-func (unsupportedDialect) SearchClause(string, string) string { return "" }
+func (unsupportedDialect) Placeholder(int) string               { return "?" }
+func (unsupportedDialect) Boolean(bool) string                  { return "0" }
+func (unsupportedDialect) TimeValue(t time.Time) any            { return t }
+func (unsupportedDialect) ScanTime(v any) (time.Time, error)    { return time.Time{}, nil }
+func (unsupportedDialect) Random() string                       { return "RANDOM()" }
+func (unsupportedDialect) NullsLast() string                    { return "" }
+func (unsupportedDialect) TextCollation(string) string          { return "" }
+func (unsupportedDialect) EscapeLike(string) string             { return "" }
+func (unsupportedDialect) SearchClause(string, string) string   { return "" }
+func (unsupportedDialect) ContainsClause(string, string) string { return "" }

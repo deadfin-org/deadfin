@@ -800,8 +800,8 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 	// path and the identify Download endpoint.
 	// remoteImages is hoisted out of the imageProcessor != nil branch so the
 	// identify download path works without libvips (WP-P8-05 §6.2).
-	imageDownloader := identify.NewHardenedDownloader(30 * time.Second)
-	remoteImages := imageserve.NewRemoteCache(imageDownloader, filepath.Join(paths.Cache, "images", "remote"))
+	imageDownloader := identify.NewHardenedDownloader(30*time.Second, "Deadfin/dev (+https://github.com/deadfin-org/deadfin)")
+	remoteImages := imageserve.NewRemoteCache(imageDownloader, filepath.Join(paths.Cache, "images", "remote"), imageserve.RemoteCacheOptions{Clock: realClock, Logger: slog.Default()})
 	var imageRenderer handlers.ImageRenderer
 	if appConfig.imageProcessor != nil {
 		imageRenderer = imageserve.New(appConfig.imageProcessor, remoteImages)
@@ -2359,6 +2359,7 @@ func personRefresher(service *people.Service) handlers.PersonRefresher {
 type itemEditor interface {
 	handlers.ItemEditor
 	handlers.ItemImageEditor
+	handlers.RemoteImageRemover
 }
 
 type refreshTrigger interface {
@@ -2498,7 +2499,7 @@ func registerRoutes(rt *router.Router, services routeServices) {
 	handlers.RegisterSubtitleStreams(rt, services.subtitles)
 	handlers.RegisterVideoAttachments(rt, services.attachments)
 	handlers.RegisterTrickplay(rt, services.trickplay)
-	handlers.RegisterImages(rt, services.items, services.images, services.virtualPaths)
+	handlers.RegisterImages(rt, services.items, services.images, services.virtualPaths, services.itemEditor, slog.Default())
 	handlers.RegisterUserImage(rt)
 	handlers.RegisterItemLookup(rt, services.items, services.lookup)
 	handlers.RegisterRemoteImages(rt, services.items, services.remoteImages)

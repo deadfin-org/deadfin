@@ -69,7 +69,22 @@ func (s *ItemStore) SearchScores(ctx context.Context, query ItemQuery, limit int
 		args = append(append([]any(nil), scoreArgs...), translated.CountArgs...)
 	}
 	args = append(args, limit)
-	statement := "SELECT items.id, " + score + " AS score FROM (" + translated.IDSQL + ") AS scope CROSS JOIN items WHERE items.id = scope.id ORDER BY score DESC, items.id ASC LIMIT " + s.ph(len(args))
+	// When a WHERE clause over items selects the candidates, the score reads
+	// the rows that the filter reads. A join back to items by id reads the
+	// full row of every candidate, which costs most of a short term's search,
+	// as such a term matches much of the guide (deadfin#885).
+	//
+	// With a visibility filter, the backends differ. PostgreSQL cannot
+	// estimate the search filter, so behind the visible_ids relation it
+	// hashes the visibility test of every item; one scan with both filters
+	// avoids that. SQLite keeps the join: the visibility filter reads the
+	// full rows, so one scan reads the table instead of the search index,
+	// and a search with few matches gets slower.
+	from := "(" + translated.IDSQL + ") AS scope CROSS JOIN items WHERE items.id = scope.id"
+	if translated.FilteredFrom == "items" || (translated.Direct && d.Placeholder(1) != "?") {
+		from = "items" + translated.DirectWhere
+	}
+	statement := "SELECT items.id, " + score + " AS score FROM " + from + " ORDER BY score DESC, items.id ASC LIMIT " + s.ph(len(args))
 	rows, err := tx.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return nil, err

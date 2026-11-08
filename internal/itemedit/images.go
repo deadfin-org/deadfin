@@ -138,6 +138,36 @@ func (s *Service) DeleteImage(ctx context.Context, id dto.UUID, imageType item.I
 	return s.saveImages(ctx, target)
 }
 
+// RemoveRemoteImage removes the image of imageType whose stored path is path,
+// as LibraryManager.ConvertImageToLocal removes a remote image that its source
+// no longer serves (BaseItem.RemoveImage). The match is on the path, so a
+// second request for the same image does not remove another one. No file is
+// deleted. A missing image is not an error.
+func (s *Service) RemoveRemoteImage(ctx context.Context, id dto.UUID, imageType item.ImageType, path string) error {
+	target, err := s.load(ctx, id)
+	if err != nil {
+		return err
+	}
+	position := -1
+	for candidate, image := range target.ImageInfos {
+		if image.Type == imageType && image.Path == path {
+			position = candidate
+			break
+		}
+	}
+	if position < 0 {
+		return nil
+	}
+	removed := target.ImageInfos[position]
+	target.ImageInfos = append(target.ImageInfos[:position:position], target.ImageInfos[position+1:]...)
+	for position := range target.ImageInfos {
+		if target.ImageInfos[position].Type == imageType && target.ImageInfos[position].Index > removed.Index {
+			target.ImageInfos[position].Index--
+		}
+	}
+	return s.saveImages(ctx, target)
+}
+
 // UpdateImageIndex moves an image to a new index (BaseItem.SwapImagesAsync).
 // Only types that allow several images (Backdrop) can move. A missing index
 // or a remote image is a no-op, as upstream. Deadfin exchanges the two image

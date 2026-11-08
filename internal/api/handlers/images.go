@@ -5,6 +5,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -44,6 +45,12 @@ type ImageRenderer interface {
 	Render(ctx context.Context, info item.ImageInfo, request imageserve.Request) (imageserve.Result, error)
 }
 
+// RemoteImageRemover removes an item image whose remote source answered
+// 404 or 403. *itemedit.Service satisfies it.
+type RemoteImageRemover interface {
+	RemoveRemoteImage(ctx context.Context, id dto.UUID, imageType item.ImageType, path string) error
+}
+
 // RegisterImages registers the item image read surface: the metadata listing,
 // and GET/HEAD serving in the query, indexed, and fully path-encoded forms.
 //
@@ -51,8 +58,14 @@ type ImageRenderer interface {
 // without a token (upstream marks these [AllowAnonymous]); the metadata listing
 // requires the default authorization policy. Uploads, deletes, reorder, and ByName
 // are deferred (see the PR body / WP-P3-03 report). User image reads are registered
-func RegisterImages(rt *router.Router, reader ItemImageReader, renderer ImageRenderer, paths path.VirtualPathExpander) {
-	h := imageHandler{reader: reader, renderer: renderer, paths: paths}
+//
+// remover can be nil. Then a remote image that its source no longer serves
+// stays on the item.
+func RegisterImages(rt *router.Router, reader ItemImageReader, renderer ImageRenderer, paths path.VirtualPathExpander, remover RemoteImageRemover, logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	h := imageHandler{reader: reader, renderer: renderer, paths: paths, remover: remover, logger: logger}
 
 	rt.Handle(http.MethodGet, "/Items/{itemId}/Images", router.Route{
 		OperationID: "GetItemImageInfos",
@@ -144,6 +157,8 @@ type imageHandler struct {
 	reader   ItemImageReader
 	renderer ImageRenderer
 	paths    path.VirtualPathExpander
+	remover  RemoteImageRemover
+	logger   *slog.Logger
 }
 
 // imageQuery binds the uniform image parameter set. Overlay params are bound so
@@ -265,9 +280,13 @@ func (h imageHandler) render(w http.ResponseWriter, r *http.Request, itemID dto.
 	// The ETag must match the listing ImageTag, which imageserve.Tag derives
 	// from the raw stored path. Expand the path for file access only.
 	rawTag := imageserve.Tag(info.Path)
+	storedPath := info.Path
 	info.Path = h.paths.Expand(info.Path)
 	result, err := h.renderer.Render(r.Context(), info, request)
 	if err != nil {
+		if errors.Is(err, imageserve.ErrRemoteGone) {
+			h.removeGone(r.Context(), itemID, info.Type, storedPath)
+		}
 		h.renderError(w, err)
 		return
 	}
@@ -275,11 +294,26 @@ func (h imageHandler) render(w http.ResponseWriter, r *http.Request, itemID dto.
 	serveImageArtifact(w, r, result)
 }
 
+// removeGone removes an image whose remote source answered 404 or 403, so the
+// next listing has no tag for it and clients stop asking
+// (LibraryManager.ConvertImageToLocal). A failed removal is logged only: the
+// remote cache still answers without a fetch.
+func (h imageHandler) removeGone(ctx context.Context, itemID dto.UUID, imageType item.ImageType, storedPath string) {
+	if h.remover == nil {
+		return
+	}
+	if err := h.remover.RemoveRemoteImage(ctx, itemID, imageType, storedPath); err != nil {
+		h.logger.Warn("remove remote image", slog.String("item", itemID.String()), slog.String("type", imageType.String()), slog.Any("error", err))
+		return
+	}
+	h.logger.Info("removed remote image that its source no longer serves", slog.String("item", itemID.String()), slog.String("type", imageType.String()))
+}
+
 func (h imageHandler) renderError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, imageserve.ErrImageNotFound):
+	case errors.Is(err, imageserve.ErrImageNotFound), errors.Is(err, imageserve.ErrRemoteGone):
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-	case errors.Is(err, imageserve.ErrRemoteUnavailable), errors.Is(err, imageserve.ErrProcessorUnavailable):
+	case errors.Is(err, imageserve.ErrRemoteUnavailable), errors.Is(err, imageserve.ErrProcessorUnavailable), errors.Is(err, imageserve.ErrRemoteFailed):
 		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 	default:
 		internalError(w)

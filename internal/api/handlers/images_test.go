@@ -58,7 +58,7 @@ func writeArtifact(t *testing.T, body string) string {
 
 func TestImageRoutesLedger(t *testing.T) {
 	rt := router.New()
-	handlers.RegisterImages(rt, fakeImageReader{}, &fakeRenderer{}, path.VirtualPathExpander{})
+	handlers.RegisterImages(rt, fakeImageReader{}, &fakeRenderer{}, path.VirtualPathExpander{}, nil, nil)
 
 	want := []router.Route{
 		{Method: http.MethodGet, Pattern: "/Items/{itemId}/Images", OperationID: "GetItemImageInfos", Policy: string(auth.PolicyDefaultAuthorization)},
@@ -87,7 +87,7 @@ func TestServeItemImageWritesArtifactWithHeaders(t *testing.T) {
 	reader := fakeImageReader{infos: []item.ImageInfo{{Type: item.ImageTypePrimary, Path: "/media/poster.jpg"}}}
 	renderer := &fakeRenderer{result: imageserve.Result{CachePath: artifact, ContentType: "image/png", Tag: "poster.jpg"}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{})
+	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{}, nil, nil)
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images/Primary?width=320&quality=90&format=png", nil)
@@ -127,7 +127,7 @@ func TestHeadItemImageOmitsBody(t *testing.T) {
 	reader := fakeImageReader{infos: []item.ImageInfo{{Type: item.ImageTypePrimary, Path: "/media/poster.jpg"}}}
 	renderer := &fakeRenderer{result: imageserve.Result{CachePath: artifact, ContentType: "image/png", Tag: "poster.jpg"}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{})
+	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{}, nil, nil)
 
 	recorder := httptest.NewRecorder()
 	rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodHead, "/Items/"+testItemHex+"/Images/Primary", nil))
@@ -148,7 +148,7 @@ func TestServeItemImageConditionalNotModified(t *testing.T) {
 	reader := fakeImageReader{infos: []item.ImageInfo{{Type: item.ImageTypePrimary, Path: "/media/poster.jpg"}}}
 	renderer := &fakeRenderer{result: imageserve.Result{CachePath: artifact, ContentType: "image/png", Tag: "poster.jpg"}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{})
+	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{}, nil, nil)
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images/Primary", nil)
@@ -168,7 +168,7 @@ func TestServeItemImagePathEncodedMapsSegments(t *testing.T) {
 	reader := fakeImageReader{infos: []item.ImageInfo{{Type: item.ImageTypePrimary, Index: 0, Path: "/media/poster.jpg"}}}
 	renderer := &fakeRenderer{result: imageserve.Result{CachePath: artifact, ContentType: "image/jpeg", Tag: "poster.jpg"}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{})
+	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{}, nil, nil)
 
 	recorder := httptest.NewRecorder()
 	rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images/Primary/0/anytag/jpg/640/360/0/0", nil))
@@ -192,7 +192,7 @@ func TestServeItemImagePathEncodedZeroBoundIsUnset(t *testing.T) {
 	reader := fakeImageReader{infos: []item.ImageInfo{{Type: item.ImageTypePrimary, Path: "/media/poster.jpg"}}}
 	renderer := &fakeRenderer{result: imageserve.Result{CachePath: artifact, ContentType: "image/jpeg", Tag: "poster.jpg"}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{})
+	handlers.RegisterImages(rt, reader, renderer, path.VirtualPathExpander{}, nil, nil)
 
 	recorder := httptest.NewRecorder()
 	rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images/Primary/0/anytag/jpg/0/0/0/0", nil))
@@ -239,7 +239,7 @@ func TestServeItemImageErrors(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			rt := router.New()
-			handlers.RegisterImages(rt, test.reader, test.renderer, path.VirtualPathExpander{})
+			handlers.RegisterImages(rt, test.reader, test.renderer, path.VirtualPathExpander{}, nil, nil)
 			recorder := httptest.NewRecorder()
 			rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, test.path, nil))
 			if recorder.Code != test.want {
@@ -252,7 +252,7 @@ func TestServeItemImageErrors(t *testing.T) {
 func TestServeItemImageWithoutRendererIsUnavailable(t *testing.T) {
 	reader := fakeImageReader{infos: []item.ImageInfo{{Type: item.ImageTypePrimary, Path: "/media/poster.jpg"}}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, nil, path.VirtualPathExpander{})
+	handlers.RegisterImages(rt, reader, nil, path.VirtualPathExpander{}, nil, nil)
 
 	recorder := httptest.NewRecorder()
 	rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images/Primary", nil))
@@ -269,7 +269,7 @@ func TestItemImageInfosListing(t *testing.T) {
 		{Type: item.ImageTypeBackdrop, Index: 0, Path: "https://cdn.example/backdrop.jpg"},
 	}}
 	rt := router.New()
-	handlers.RegisterImages(rt, reader, &fakeRenderer{}, path.VirtualPathExpander{})
+	handlers.RegisterImages(rt, reader, &fakeRenderer{}, path.VirtualPathExpander{}, nil, nil)
 
 	recorder := httptest.NewRecorder()
 	rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images", nil))
@@ -302,5 +302,45 @@ func TestItemImageInfosListing(t *testing.T) {
 	}
 	if backdrop := listing[1]; backdrop.ImageType != "Backdrop" || backdrop.ImageTag != "backdrop.jpg" || backdrop.Size != 0 {
 		t.Errorf("backdrop = %+v, want Backdrop/backdrop.jpg/size 0 (remote, not downloaded)", backdrop)
+	}
+}
+
+type fakeRemoteRemover struct {
+	calls []string
+}
+
+func (f *fakeRemoteRemover) RemoveRemoteImage(_ context.Context, _ dto.UUID, imageType item.ImageType, path string) error {
+	f.calls = append(f.calls, imageType.String()+" "+path)
+	return nil
+}
+
+// TestServeItemImageRemoteFailures checks #886: a remote source that answers
+// 404 or 403 removes the image and answers 404; another failure answers 503
+// and keeps the image.
+func TestServeItemImageRemoteFailures(t *testing.T) {
+	const source = "https://cdn.example/logo.png"
+	reader := fakeImageReader{infos: []item.ImageInfo{{Type: item.ImageTypePrimary, Path: source}}}
+	for _, test := range []struct {
+		name    string
+		err     error
+		want    int
+		removed bool
+	}{
+		{"gone", imageserve.ErrRemoteGone, http.StatusNotFound, true},
+		{"failed", imageserve.ErrRemoteFailed, http.StatusServiceUnavailable, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			remover := &fakeRemoteRemover{}
+			rt := router.New()
+			handlers.RegisterImages(rt, reader, &fakeRenderer{err: test.err}, path.VirtualPathExpander{}, remover, nil)
+			recorder := httptest.NewRecorder()
+			rt.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/Items/"+testItemHex+"/Images/Primary?fillWidth=120", nil))
+			if recorder.Code != test.want {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.want)
+			}
+			if got := len(remover.calls) == 1 && remover.calls[0] == "Primary "+source; got != test.removed {
+				t.Fatalf("remover calls = %v, want removed=%v", remover.calls, test.removed)
+			}
+		})
 	}
 }

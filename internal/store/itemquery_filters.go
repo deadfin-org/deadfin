@@ -43,6 +43,25 @@ func (b *itemQueryFilterBuilder) stringList(values []string) string {
 	return strings.Join(placeholders, ", ")
 }
 
+// kindList lists stored kind names. A search writes them as SQL literals
+// when every name is a plain word, as the kind enum names are. The search
+// filter cannot seek, so the kind decides between a seek on the kind and a
+// scan of every item. Only with a literal can SQLite read the kind's row
+// count from its statistics: with a bound "?" it assumes a small kind, and a
+// search for programmes reads the full rows of every programme of the guide
+// one by one instead of scanning the narrow search index (deadfin#885).
+func (b *itemQueryFilterBuilder) kindList(names []string, literal bool) string {
+	for _, name := range names {
+		if name == "" || strings.IndexFunc(name, func(r rune) bool { return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') }) >= 0 {
+			literal = false
+		}
+	}
+	if !literal {
+		return b.stringList(names)
+	}
+	return "'" + strings.Join(names, "', '") + "'"
+}
+
 func itemQuerySourceTypeValues(sourceTypes []item.SourceType) ([]string, error) {
 	if len(sourceTypes) == 1 {
 		value := sourceTypes[0].String()
@@ -74,6 +93,9 @@ func translateItemQueryFilters(query ItemQuery, d Dialect) (string, []any, error
 	}
 
 	b := itemQueryFilterBuilder{d: d, userID: query.UserID, disableLiveTVChannelUserDataName: query.DisableLiveTVChannelUserDataName, boundedCandidates: query.latestWindow.appliesTo(query), clauses: make([]string, 0, 24)}
+	if query.SearchTerm != "" {
+		b.addSearch(query.SearchTerm)
+	}
 	if len(query.ItemIDs) != 0 {
 		b.clauses = append(b.clauses, "id IN ("+b.uuidList(query.ItemIDs)+")")
 	}
@@ -100,10 +122,10 @@ func translateItemQueryFilters(query ItemQuery, d Dialect) (string, []any, error
 		b.clauses = append(b.clauses, "top_parent_id IN ("+b.uuidList(query.TopParentIDs)+")")
 	}
 	if len(query.IncludeItemTypes) != 0 {
-		b.clauses = append(b.clauses, "kind IN ("+b.stringList(storedKindNames(query.IncludeItemTypes))+")")
+		b.clauses = append(b.clauses, "kind IN ("+b.kindList(storedKindNames(query.IncludeItemTypes), query.SearchTerm != "")+")")
 	}
 	if len(query.IncludeItemTypes) == 0 && len(query.ExcludeItemTypes) != 0 {
-		b.clauses = append(b.clauses, "kind NOT IN ("+b.stringList(storedKindNames(query.ExcludeItemTypes))+")")
+		b.clauses = append(b.clauses, "kind NOT IN ("+b.kindList(storedKindNames(query.ExcludeItemTypes), query.SearchTerm != "")+")")
 	}
 	if len(query.MediaTypes) != 0 {
 		values := make([]string, len(query.MediaTypes))
@@ -154,13 +176,6 @@ func translateItemQueryFilters(query ItemQuery, d Dialect) (string, []any, error
 	}
 	if query.MaxRunTimeTicks != nil {
 		b.clauses = append(b.clauses, "run_time_ticks <= "+b.argument(*query.MaxRunTimeTicks))
-	}
-	if query.SearchTerm != "" {
-		cleanPattern := "%" + item.CleanName(query.SearchTerm) + "%"
-		originalPattern := "%" + query.SearchTerm + "%"
-		cleanSearch := d.SearchClause("clean_name", b.argument(cleanPattern))
-		originalSearch := d.SearchClause("original_title", b.argument(originalPattern))
-		b.clauses = append(b.clauses, "("+cleanSearch+" OR "+originalSearch+" OR "+b.animeTitleSearch(query.SearchTerm, cleanPattern)+")")
 	}
 	b.addBooleanFact("is_folder", query.IsFolder)
 	if query.IsVirtualItem != nil {
@@ -319,6 +334,31 @@ func (b *itemQueryFilterBuilder) addUserDataPredicate(include bool, predicate fu
 	b.clauses = append(b.clauses, fact)
 }
 
+// addSearch ports the SearchTerm filter of
+// BaseItemRepository.TranslateQuery
+// (upstream/jellyfin/Jellyfin.Server.Implementations/Item/BaseItemRepository.TranslateQuery.cs:174-189):
+// the clean name contains the clean term, or the original title is like the
+// term. The anime titles are a third match (animeTitleSearch).
+//
+// An unfiltered search (GET /Search/Hints) tests every item, and the Live TV
+// guide makes most of them programmes (deadfin#885), so the clause keeps the
+// cost per item low:
+//   - The builder adds it first. SQLite tests the filter terms in the
+//     order of the statement, so the name test rejects most rows before the
+//     kind and flag tests run.
+//   - The clean name and the clean term are lower case and hold only
+//     letters, digits, and spaces (item.CleanName), so a substring test
+//     matches what LIKE '%term%' matches, at less cost. Upstream uses the
+//     same string.Contains.
+//   - Most items have no original title. Upstream tests it for NULL
+//     first; the LIKE then runs only on the items that have one.
+func (b *itemQueryFilterBuilder) addSearch(term string) {
+	clean := item.CleanName(term)
+	cleanSearch := b.d.ContainsClause("clean_name", b.argument(clean))
+	originalSearch := "(original_title IS NOT NULL AND " + b.d.SearchClause("original_title", b.argument("%"+term+"%")) + ")"
+	b.clauses = append(b.clauses, "("+cleanSearch+" OR "+originalSearch+" OR "+b.animeTitleSearch(term, "%"+clean+"%")+")")
+}
+
 // animeTitleSearch matches an item through the anime titles stored under one
 // of its provider ids, so a search for "Attack on Titan",
 // "Shingeki", or "進撃" finds the same series. Titles match on clean_title
@@ -329,14 +369,19 @@ func (b *itemQueryFilterBuilder) addUserDataPredicate(include bool, predicate fu
 // their items through ix_provider_ids_provider_value_item. A correlated
 // EXISTS probed provider_ids and anime_titles for every item the name did
 // not match, which made an unfiltered search (GET /Search/Hints) read every
-// provider id of the library (deadfin#826).
+// provider id of the library (deadfin#826). The uncorrelated EXISTS runs
+// once; when no anime title matches, it skips the IN probe for every item
+// (deadfin#885).
 func (b *itemQueryFilterBuilder) animeTitleSearch(term, cleanPattern string) string {
 	d := b.d
-	conditions := d.SearchClause("anime_title.clean_title", b.argument(cleanPattern))
-	if folded := anime.FoldTitle(term); folded != "" {
-		conditions += " OR " + d.SearchClause("anime_title.fold_title", b.argument("%"+folded+"%"))
+	matches := func() string {
+		conditions := d.SearchClause("anime_title.clean_title", b.argument(cleanPattern))
+		if folded := anime.FoldTitle(term); folded != "" {
+			conditions += " OR " + d.SearchClause("anime_title.fold_title", b.argument("%"+folded+"%"))
+		}
+		return "SELECT anime_provider.item_id FROM anime_titles AS anime_title JOIN provider_ids AS anime_provider ON anime_provider.provider = anime_title.provider AND anime_provider.value = anime_title.external_id WHERE " + conditions
 	}
-	return "items.id IN (SELECT anime_provider.item_id FROM anime_titles AS anime_title JOIN provider_ids AS anime_provider ON anime_provider.provider = anime_title.provider AND anime_provider.value = anime_title.external_id WHERE " + conditions + ")"
+	return "(EXISTS (" + matches() + ") AND items.id IN (" + matches() + "))"
 }
 
 // storedKindNames ports ItemTypeLookup.BaseItemKindNames

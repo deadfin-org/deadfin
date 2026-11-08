@@ -79,7 +79,7 @@ func TestRejectNonGlobalUnicastAcceptsPublic(t *testing.T) {
 // TestHardenedDownloaderRejectsNonHTTPScheme verifies the downloader refuses
 // a scheme other than http(s) before making any request.
 func TestHardenedDownloaderRejectsNonHTTPScheme(t *testing.T) {
-	d := NewHardenedDownloader(5e9)
+	d := NewHardenedDownloader(5e9, "")
 	for _, raw := range []string{"file:///etc/passwd", "ftp://example.com/img.jpg", "gopher://example.com/"} {
 		_, err := d.Fetch(context.Background(), raw)
 		if !errors.Is(err, ErrImageRefused) || !strings.Contains(err.Error(), "scheme must be http or https") {
@@ -92,7 +92,7 @@ func TestHardenedDownloaderRejectsNonHTTPScheme(t *testing.T) {
 // the scheme check and is then refused at dial time for a special-purpose
 // address (D-27).
 func TestHardenedDownloaderRefusesPrivateHTTP(t *testing.T) {
-	d := NewHardenedDownloader(5e9)
+	d := NewHardenedDownloader(5e9, "")
 	for _, raw := range []string{"http://127.0.0.1/img.jpg", "http://192.168.1.1/img.jpg", "http://[::1]/img.jpg"} {
 		_, err := d.Fetch(context.Background(), raw)
 		if !errors.Is(err, ErrImageRefused) || !strings.Contains(err.Error(), "special-purpose address") {
@@ -177,7 +177,7 @@ func TestHardenedDownloaderAcceptsImage(t *testing.T) {
 // TestHardenedDownloaderRejectsPrivateAddress verifies a fetch to a private
 // address fails at dial time (P1 security).
 func TestHardenedDownloaderRejectsPrivateAddress(t *testing.T) {
-	d := NewHardenedDownloader(1e9)
+	d := NewHardenedDownloader(1e9, "")
 	_, err := d.Fetch(context.Background(), "https://10.0.0.1/img.jpg")
 	if !errors.Is(err, ErrImageRefused) {
 		t.Fatalf("Fetch(10.0.0.1) err = %v, want ErrImageRefused at dial time", err)
@@ -240,5 +240,30 @@ func TestRejectNonGlobalUnicastDeniesSpecialPurposeBlocks(t *testing.T) {
 		if err := rejectNonGlobalUnicast("tcp", addr+":443", nil); err != nil {
 			t.Errorf("rejectNonGlobalUnicast(%q) returned %v, want nil", host, err)
 		}
+	}
+}
+
+// TestHardenedDownloaderSendsUserAgentAndStatus verifies the configured
+// User-Agent goes out and a non-2xx status comes back as a StatusError with
+// no URL in its text (#886).
+func TestHardenedDownloaderSendsUserAgentAndStatus(t *testing.T) {
+	var gotAgent string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAgent = r.UserAgent()
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	d := HardenedDownloader{client: server.Client(), userAgent: "Deadfin/test"}
+	_, err := d.Fetch(t.Context(), server.URL+"/secret-token/logo.png")
+	var status StatusError
+	if !errors.As(err, &status) || status.RemoteStatus() != http.StatusNotFound {
+		t.Fatalf("Fetch error = %v, want StatusError 404", err)
+	}
+	if strings.Contains(err.Error(), "secret-token") {
+		t.Errorf("error %q names the URL", err)
+	}
+	if gotAgent != "Deadfin/test" {
+		t.Errorf("User-Agent = %q, want Deadfin/test", gotAgent)
 	}
 }

@@ -38,6 +38,16 @@ const MaxRemoteImageBytes = 32 << 20
 // error text names the reason.
 var ErrImageRefused = errors.New("remote image refused")
 
+// StatusError reports a remote response with a status outside 2xx. It
+// carries the status only, never the URL, because a provider URL can carry
+// credentials.
+type StatusError struct{ Status int }
+
+func (e StatusError) Error() string { return fmt.Sprintf("remote image: status %d", e.Status) }
+
+// RemoteStatus returns the HTTP status (imageserve.RemoteStatus).
+func (e StatusError) RemoteStatus() int { return e.Status }
+
 // HardenedDownloader adapts a hardened HTTP transport to the Downloader seam
 // (D-27). It enforces the transport hardening that defense-in-depth requires:
 // scheme must be http or https, as in stock; the transport uses no proxy, and
@@ -47,11 +57,18 @@ var ErrImageRefused = errors.New("remote image refused")
 // MaxRemoteImageBytes and must be 2xx with an image/* Content-Type, with the
 // upstream octet-stream fallback that derives the type from the URL-path
 // extension (ProviderManager.cs:227-236).
-type HardenedDownloader struct{ client *http.Client }
+//
+// Each request sends userAgent, as upstream's default named HTTP client sends
+// its product header. Some image hosts (Wikimedia) refuse the Go default.
+type HardenedDownloader struct {
+	client    *http.Client
+	userAgent string
+}
 
-// NewHardenedDownloader builds a Downloader with a hardened HTTP client.
-func NewHardenedDownloader(timeout time.Duration) HardenedDownloader {
-	return HardenedDownloader{client: newHardenedImageClient(timeout)}
+// NewHardenedDownloader builds a Downloader with a hardened HTTP client that
+// sends userAgent. An empty userAgent keeps the Go default.
+func NewHardenedDownloader(timeout time.Duration, userAgent string) HardenedDownloader {
+	return HardenedDownloader{client: newHardenedImageClient(timeout), userAgent: userAgent}
 }
 
 // Fetch downloads and validates a remote image. The URL must be http(s); every
@@ -70,13 +87,16 @@ func (d HardenedDownloader) Fetch(ctx context.Context, imageURL string) ([]byte,
 	if err != nil {
 		return nil, fmt.Errorf("remote image: build request: %w", err)
 	}
+	if d.userAgent != "" {
+		request.Header.Set("User-Agent", d.userAgent)
+	}
 	response, err := d.client.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("remote image: fetch: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("remote image: status %d", response.StatusCode)
+		return nil, StatusError{Status: response.StatusCode}
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, MaxRemoteImageBytes+1))
 	if err != nil {

@@ -57,6 +57,10 @@ func (Dialect) SearchClause(column, placeholder string) string {
 	return column + " ILIKE " + placeholder + ` ESCAPE '\'`
 }
 
+func (Dialect) ContainsClause(column, placeholder string) string {
+	return "strpos(" + column + ", " + placeholder + ") > 0"
+}
+
 func parseTime(value string) (time.Time, error) {
 	for _, layout := range []string{
 		time.RFC3339Nano,

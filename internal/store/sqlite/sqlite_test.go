@@ -385,6 +385,9 @@ func TestDialectOutputInvariants(t *testing.T) {
 	if got := dialect.SearchClause("clean_name", "?"); got != `clean_name LIKE ? ESCAPE '\'` {
 		t.Fatalf("SQLite search clause = %q", got)
 	}
+	if got := dialect.ContainsClause("clean_name", "?"); got != `instr(clean_name, ?) > 0` {
+		t.Fatalf("SQLite contains clause = %q", got)
+	}
 
 	original := time.Date(2026, 7, 26, 15, 4, 5, 123456789, time.FixedZone("offset", -7*60*60))
 	value := dialect.TimeValue(original)

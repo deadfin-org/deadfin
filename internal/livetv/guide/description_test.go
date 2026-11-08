@@ -60,6 +60,26 @@ func TestDescriptionEpisodes(t *testing.T) {
 			want:     want{"The Simpsons", strptr("Bart's Birthday"), strptr("Bart turns eleven."), intptr(36), intptr(1), true, false},
 		},
 		{
+			label:    "single line synopsis",
+			children: "<title>Sports Report</title><desc>S1 E11 Kit Hoover competed in cross-country and track at State, then signed with a college team.</desc>",
+			want:     want{"Sports Report", nil, strptr("Kit Hoover competed in cross-country and track at State, then signed with a college team."), intptr(1), intptr(11), true, false},
+		},
+		{
+			label:    "single line list synopsis",
+			children: "<title>Pet Show</title><desc>S10 E5 A family dog profile; acupuncture therapy</desc>",
+			want:     want{"Pet Show", nil, strptr("A family dog profile; acupuncture therapy"), intptr(10), intptr(5), true, false},
+		},
+		{
+			label:    "absurd season",
+			children: "<title>Odd Show</title><desc>S18000000 E573584570 Something.</desc>",
+			want:     want{"Odd Show", nil, strptr("S18000000 E573584570 Something."), nil, nil, false, false},
+		},
+		{
+			label:    "absurd episode",
+			children: "<title>Odd Show</title><desc>S1 E10000\nSynopsis.</desc>",
+			want:     want{"Odd Show", nil, strptr("S1 E10000\nSynopsis."), nil, nil, false, false},
+		},
+		{
 			label:    "repeat without marker",
 			children: "<title>The Simpsons</title><desc>S07 E17 The Doll</desc><previously-shown/>",
 			want:     want{"The Simpsons", strptr("The Doll"), strptr("S07 E17 The Doll"), intptr(7), intptr(17), true, true},

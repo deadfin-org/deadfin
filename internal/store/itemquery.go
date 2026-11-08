@@ -370,6 +370,12 @@ type TranslatedItemQuery struct {
 	// by id. Both are empty when a transform applies; use IDSQL then. They
 	// take CountArgs.
 	FilteredFrom, FilteredWhere string
+	// Direct is true when the filtered, visible rows are the rows of items
+	// that DirectWhere ("" or " WHERE ...") selects: the relation is the
+	// base filters, optionally narrowed by visibility. DirectWhere takes
+	// CountArgs.
+	Direct      bool
+	DirectWhere string
 }
 
 // Translate turns an ItemQuery into portable SQL for d. Both statements apply
@@ -534,6 +540,8 @@ func Translate(query ItemQuery, d Dialect) (TranslatedItemQuery, error) {
 		IDSQL:         idSQL,
 		FilteredFrom:  filteredFrom,
 		FilteredWhere: filteredWhere,
+		Direct:        direct,
+		DirectWhere:   directWhere,
 	}, nil
 }
 

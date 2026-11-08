@@ -49,6 +49,10 @@ func (Dialect) SearchClause(column, placeholder string) string {
 	return column + " LIKE " + placeholder + ` ESCAPE '\'`
 }
 
+func (Dialect) ContainsClause(column, placeholder string) string {
+	return "instr(" + column + ", " + placeholder + ") > 0"
+}
+
 func sqliteMicros(value any) (int64, error) {
 	switch value := value.(type) {
 	case int64:

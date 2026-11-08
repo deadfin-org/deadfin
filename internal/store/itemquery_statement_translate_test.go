@@ -87,10 +87,11 @@ func TestTranslateItemQueryCTEStatementsAreSingleAndSeparate(t *testing.T) {
 			if strings.Contains(strings.ToUpper(translated.CountSQL), " ORDER BY ") || strings.Contains(strings.ToUpper(translated.CountSQL), " LIMIT ") || strings.Contains(strings.ToUpper(translated.CountSQL), " OFFSET ") {
 				t.Fatalf("count SQL must remain unpaged: %q", translated.CountSQL)
 			}
-			// Four search bindings: clean_name, original_title, and the anime
-			// clean_title and fold_title.
-			if got, want := len(translated.CountArgs), 6; got != want {
-				t.Fatalf("count arguments = %#v, want four search bindings and two explicit IDs", translated.CountArgs)
+			// Six search bindings: clean_name, original_title, and the anime
+			// clean_title and fold_title, once in the EXISTS guard and once in
+			// the IN subquery.
+			if got, want := len(translated.CountArgs), 8; got != want {
+				t.Fatalf("count arguments = %#v, want six search bindings and two explicit IDs", translated.CountArgs)
 			}
 			if len(translated.Args) < len(translated.CountArgs)+2 || !reflect.DeepEqual(translated.Args[:len(translated.CountArgs)], translated.CountArgs) {
 				t.Fatalf("page arguments = %#v, want count arguments %#v as the prefix", translated.Args, translated.CountArgs)
