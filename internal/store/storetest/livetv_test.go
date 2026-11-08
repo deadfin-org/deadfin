@@ -3,6 +3,7 @@
 package storetest_test
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -259,4 +260,95 @@ func assertLiveTvPlan(t *testing.T, stores store.Stores, statement string, args 
 		}
 	}
 	t.Errorf("plan uses none of %v:\n%s", indexes, plan)
+}
+
+// TestLiveTvAiringSQLite checks the airing filter at the class limits of
+// ix_items_airing (#892).
+func TestLiveTvAiringSQLite(t *testing.T) {
+	stores, err := sqlite.Open(t.Context(), ":memory:")
+	if err != nil {
+		t.Fatalf("open SQLite: %v", err)
+	}
+	t.Cleanup(func() { _ = stores.Close() })
+	runLiveTvAiring(t, stores)
+}
+
+// TestLiveTvAiringPostgres runs the same contract on PostgreSQL when
+// DEADFIN_TEST_POSTGRES_DSN is set.
+func TestLiveTvAiringPostgres(t *testing.T) {
+	runLiveTvAiring(t, storetest.OpenPostgres(t))
+}
+
+func runLiveTvAiring(t *testing.T, stores store.Stores) {
+	t.Helper()
+	ctx := t.Context()
+	items := store.NewItemStore(stores)
+	now := time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)
+	folder := catalog.Folder("/data/metadata", "/data", now)
+	if err := items.Upsert(ctx, folder); err != nil {
+		t.Fatalf("upsert folder: %v", err)
+	}
+	channel := catalog.Channel(catalog.ChannelInfo{ID: "m3u_a", Name: "A", Number: "1"}, folder.ID, nil, now)
+	if err := items.Upsert(ctx, channel); err != nil {
+		t.Fatalf("upsert channel: %v", err)
+	}
+	// Each class limit gets a programme that ends at now with a span of
+	// exactly the limit (airing), one a minute longer that started a
+	// minute earlier and also ends at now (airing, next class), and one
+	// with the limit's span that ended a minute ago.
+	var programmes []guide.Program
+	var want []string
+	add := func(name string, start time.Time, span time.Duration, airing bool) {
+		// The guide id holds the channel and the start; a distinct guide
+		// channel keeps the ids of equal starts apart.
+		programmes = append(programmes, liveTvProgram(fmt.Sprintf("m3u_a%d", len(programmes)), start, int(span/time.Minute), name))
+		if airing {
+			want = append(want, name)
+		}
+	}
+	for _, limit := range []time.Duration{time.Hour, 2 * time.Hour, 4 * time.Hour, 8 * time.Hour, 24 * time.Hour, 48 * time.Hour, 7 * 24 * time.Hour} {
+		add("limit "+limit.String(), now.Add(-limit), limit, true)
+		add("over "+limit.String(), now.Add(-limit-time.Minute), limit+time.Minute, true)
+		add("ended "+limit.String(), now.Add(-limit-time.Minute), limit, false)
+	}
+	add("ten days", now.Add(-9*24*time.Hour), 10*24*time.Hour, true)
+	add("starts now", now, 30*time.Minute, true)
+	add("upcoming", now.Add(time.Minute), 30*time.Minute, false)
+	desired := make([]item.Item, 0, len(programmes))
+	for _, program := range programmes {
+		desired = append(desired, catalog.Program(program, channel, nil, now))
+	}
+	if _, err := items.ReconcileChildren(ctx, channel.ID, desired); err != nil {
+		t.Fatalf("reconcile programmes: %v", err)
+	}
+
+	airing := true
+	query := store.ItemQuery{
+		IncludeItemTypes: []item.Kind{item.KindLiveTvProgram},
+		TopParentIDs:     []dto.UUID{folder.ID},
+		IsAiring:         &airing,
+		ReferenceTime:    &now,
+		SortBy:           []store.ItemSortBy{store.ItemSortByStartDate, store.ItemSortBySortName},
+	}
+	result, err := items.Query(ctx, query)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	got := make(map[string]bool, len(result.Items))
+	for _, value := range result.Items {
+		got[*value.Name] = true
+	}
+	for _, name := range want {
+		if !got[name] {
+			t.Errorf("airing programmes miss %q", name)
+		}
+	}
+	if len(result.Items) != len(want) {
+		t.Errorf("airing programmes %d, want %d", len(result.Items), len(want))
+	}
+	translated, err := items.TranslateQuery(ctx, query)
+	if err != nil {
+		t.Fatalf("translate: %v", err)
+	}
+	assertLiveTvPlan(t, stores, translated.SQL, translated.Args, "ix_items_airing")
 }

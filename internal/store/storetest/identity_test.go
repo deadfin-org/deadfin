@@ -385,6 +385,10 @@ func (postgresReturningDialect) ContainsClause(column, placeholder string) strin
 	return column + " = " + placeholder
 }
 
+func (postgresReturningDialect) SpanAtMost(start, end string, limit time.Duration) string {
+	return end + " - " + start + " <= interval '" + strconv.FormatInt(int64(limit/time.Second), 10) + " seconds'"
+}
+
 type postgresReturningDriver struct{}
 
 func (postgresReturningDriver) Open(string) (driver.Conn, error) { return postgresReturningConn{}, nil }

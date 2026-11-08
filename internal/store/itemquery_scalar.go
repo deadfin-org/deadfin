@@ -136,7 +136,7 @@ func (b *itemQueryFilterBuilder) addScalarStateFilters(query ItemQuery) error {
 		now := b.argument(nowValue)
 		if query.IsAiring != nil {
 			if *query.IsAiring {
-				b.clauses = append(b.clauses, "start_date <= "+now+" AND end_date >= "+b.repeatedArgument(nowValue, now))
+				b.clauses = append(b.clauses, b.airingClause(*query.ReferenceTime, nowValue, now))
 			} else {
 				b.clauses = append(b.clauses, "start_date > "+now+" AND end_date < "+b.repeatedArgument(nowValue, now))
 			}
@@ -154,6 +154,55 @@ func (b *itemQueryFilterBuilder) addScalarStateFilters(query ItemQuery) error {
 		}
 	}
 	return nil
+}
+
+// airingSpanLimits returns the upper span limits of the airing classes. A
+// programme whose span is longer than the last limit, or which has no
+// span, is in the last class, len(airingSpanLimits()).
+func airingSpanLimits() []time.Duration {
+	return []time.Duration{
+		time.Hour, 2 * time.Hour, 4 * time.Hour, 8 * time.Hour,
+		24 * time.Hour, 48 * time.Hour, 7 * 24 * time.Hour,
+	}
+}
+
+// AiringClass returns the airing class expression of d. The airing index
+// ix_items_airing (migration 00033) keys on this expression and start_date;
+// the migrations hold the same text.
+func AiringClass(d Dialect) string {
+	limits := airingSpanLimits()
+	var class strings.Builder
+	class.WriteString("(CASE")
+	for index, limit := range limits {
+		fmt.Fprintf(&class, " WHEN %s THEN %d", d.SpanAtMost("start_date", "end_date", limit), index)
+	}
+	fmt.Fprintf(&class, " ELSE %d END)", len(limits))
+	return class.String()
+}
+
+// airingClause matches start_date <= now AND end_date >= now. It bounds
+// the start of an airing item by its span class as well: an item with a
+// span of at most limit airs at now only if it started at or after now -
+// limit. ix_items_airing then reads in each class only the recent starts,
+// not every item that started before now, which includes every past
+// programme of the guide (#892). Every arm bounds start_date, so each arm
+// implies the partial index predicate. The clause selects ids in a
+// subquery, so the planner cannot walk ix_items_top_kind_start for the
+// airing range instead. now is the placeholder of nowValue.
+func (b *itemQueryFilterBuilder) airingClause(reference time.Time, nowValue any, now string) string {
+	class, limits := AiringClass(b.d), airingSpanLimits()
+	arms := make([]string, 0, len(limits)+1)
+	// The first placeholder in the text is now, which the caller bound.
+	at := now
+	for index := range len(limits) + 1 {
+		arm := fmt.Sprintf("(start_date <= %s AND %s = %d", at, class, index)
+		if index < len(limits) {
+			arm += " AND start_date >= " + b.argument(b.d.TimeValue(reference.UTC().Add(-limits[index])))
+		}
+		arms = append(arms, arm+")")
+		at = b.repeatedArgument(nowValue, now)
+	}
+	return "id IN (SELECT id FROM items WHERE (" + strings.Join(arms, " OR ") + ") AND end_date >= " + at + ")"
 }
 
 func (b *itemQueryFilterBuilder) boundBoolean(value bool) string {

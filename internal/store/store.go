@@ -34,6 +34,9 @@ type Dialect interface {
 	// literal, case-sensitive substring. It ports the EF Core translation of
 	// string.Contains.
 	ContainsClause(column, placeholder string) string
+	// SpanAtMost compares the span from the start to the end column with
+	// limit. The text must match the airing index (ix_items_airing).
+	SpanAtMost(start, end string, limit time.Duration) string
 }
 
 // Maintainer runs backend-specific database maintenance (SQLite: PRAGMA

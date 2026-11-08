@@ -451,6 +451,10 @@ func Translate(query ItemQuery, d Dialect) (TranslatedItemQuery, error) {
 	if err != nil {
 		return TranslatedItemQuery{}, err
 	}
+	airing := query.IsAiring != nil && *query.IsAiring
+	if airing && !strings.Contains(where, resumeWinnerCTEReference) {
+		relation.materialize()
+	}
 	withSQL, selectedIDs, transformedArgs := relation.withSQL(), relation.current, relation.args
 	filteredFrom, filteredWhere := "", ""
 	if len(relation.ctes) == 1 && selectedIDs == "filtered_ids" && !strings.Contains(where, resumeWinnerCTEReference) {
@@ -461,8 +465,12 @@ func Translate(query ItemQuery, d Dialect) (TranslatedItemQuery, error) {
 	// sees every predicate on the ordered table and can walk an index in the
 	// requested order and stop at the limit. Behind "id IN (SELECT id FROM
 	// <cte>)" it sorts every item first (Live TV guide: 3.7 s to 0.6 s).
+	// An airing query is the exception: the airing items are few, and they
+	// are the last of a start-date index walk, which first reads every past
+	// programme (#892). It selects the airing ids by ix_items_airing and
+	// sorts them.
 	directWhere, direct := "", false
-	if source == "items" && !strings.Contains(where, resumeWinnerCTEReference) {
+	if source == "items" && !airing && !strings.Contains(where, resumeWinnerCTEReference) {
 		switch {
 		case len(relation.ctes) == 1 && selectedIDs == "filtered_ids":
 			directWhere, direct = where, true

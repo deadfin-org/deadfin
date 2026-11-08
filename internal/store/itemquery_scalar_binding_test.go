@@ -13,10 +13,20 @@ import (
 	"github.com/deadfin-org/deadfin/internal/store/sqlite"
 )
 
+// postgresAiringArgs are the PostgreSQL arguments of an airing filter at
+// reference, then rest: now once and the start bound of each span class.
+func postgresAiringArgs(reference time.Time, rest ...any) []any {
+	args := []any{postgres.Dialect{}.TimeValue(reference)}
+	for _, limit := range []time.Duration{time.Hour, 2 * time.Hour, 4 * time.Hour, 8 * time.Hour, 24 * time.Hour, 48 * time.Hour, 7 * 24 * time.Hour} {
+		args = append(args, postgres.Dialect{}.TimeValue(reference.Add(-limit)))
+	}
+	return append(args, rest...)
+}
+
 // TestTranslateItemQueryAiringScalarBindings keeps repeated logical values
 // bound at every SQLite positional placeholder while PostgreSQL reuses its
 // numbered parameters. It exercises the combined predicates, where a single
-// clock value appears three times and a positive season value appears three
+// clock value appears ten times and a positive season value appears three
 // times in the generated SQL.
 func TestTranslateItemQueryAiringScalarBindings(t *testing.T) {
 	reference := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
@@ -39,16 +49,19 @@ func TestTranslateItemQueryAiringScalarBindings(t *testing.T) {
 				AiredDuringSeason: &positiveSeason,
 				ReferenceTime:     &reference,
 			},
-			sqliteArgs: []any{
-				sqlite.Dialect{}.TimeValue(reference), sqlite.Dialect{}.TimeValue(reference), sqlite.Dialect{}.TimeValue(reference),
+			sqliteArgs: append(sqliteAiringArgs(reference),
+				sqlite.Dialect{}.TimeValue(reference),
 				positiveSeason, positiveSeason, positiveSeason,
-			},
+			),
 			postgresSQL: []string{
-				"start_date <= $1 AND end_date >= $1",
+				"(start_date <= $1 AND ",
+				"start_date >= $2)",
+				"start_date >= $8) OR (start_date <= $1 AND ",
+				") AND end_date >= $1)",
 				"end_date > $1",
-				"parent_index_number = $2 OR airs_after_season_number = $2 OR airs_before_season_number = $2",
+				"parent_index_number = $9 OR airs_after_season_number = $9 OR airs_before_season_number = $9",
 			},
-			postgresArgs: []any{postgres.Dialect{}.TimeValue(reference), positiveSeason},
+			postgresArgs: postgresAiringArgs(reference, positiveSeason),
 		},
 		{
 			name: "airing false has aired true negative season",

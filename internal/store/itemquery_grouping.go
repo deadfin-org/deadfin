@@ -48,6 +48,18 @@ func (r *itemQueryIDRelation) addMaterialized(name, sql string) {
 	r.current = name
 }
 
+// materialize makes every CTE one that the database computes once. An
+// airing query selects few ids; PostgreSQL otherwise inlines the visibility
+// CTE, whose per-row access checks it costs high, and sorts every item to
+// stop at the limit early (#892).
+func (r *itemQueryIDRelation) materialize() {
+	for index, cte := range r.ctes {
+		if name, sql, ok := strings.Cut(cte, " AS ("); ok && !strings.Contains(name, " ") {
+			r.ctes[index] = name + " AS MATERIALIZED (" + sql
+		}
+	}
+}
+
 func (r *itemQueryIDRelation) addAuxiliary(name, sql string) {
 	r.ctes = append(r.ctes, name+" AS ("+sql+")")
 }

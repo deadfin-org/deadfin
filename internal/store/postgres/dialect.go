@@ -61,6 +61,13 @@ func (Dialect) ContainsClause(column, placeholder string) string {
 	return "strpos(" + column + ", " + placeholder + ") > 0"
 }
 
+// SpanAtMost writes the limit in seconds. An index expression matches a
+// query only with the same interval value, and interval '1 day' differs
+// from interval '86400 seconds'.
+func (Dialect) SpanAtMost(start, end string, limit time.Duration) string {
+	return end + " - " + start + " <= interval '" + strconv.FormatInt(int64(limit/time.Second), 10) + " seconds'"
+}
+
 func parseTime(value string) (time.Time, error) {
 	for _, layout := range []string{
 		time.RFC3339Nano,

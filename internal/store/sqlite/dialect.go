@@ -53,6 +53,11 @@ func (Dialect) ContainsClause(column, placeholder string) string {
 	return "instr(" + column + ", " + placeholder + ") > 0"
 }
 
+// SpanAtMost compares stored microseconds.
+func (Dialect) SpanAtMost(start, end string, limit time.Duration) string {
+	return end + " - " + start + " <= " + strconv.FormatInt(limit.Microseconds(), 10)
+}
+
 func sqliteMicros(value any) (int64, error) {
 	switch value := value.(type) {
 	case int64:

@@ -104,6 +104,18 @@ func TestTranslateItemQueryScalarFiltersAreBoundAndApplied(t *testing.T) {
 	}
 }
 
+// sqliteAiringArgs are the SQLite arguments of an airing filter at
+// reference: now and the start bound of each span class, then now for the
+// unbounded class and for the end (#892).
+func sqliteAiringArgs(reference time.Time) []any {
+	now := sqlite.Dialect{}.TimeValue(reference)
+	args := []any{}
+	for _, limit := range []time.Duration{time.Hour, 2 * time.Hour, 4 * time.Hour, 8 * time.Hour, 24 * time.Hour, 48 * time.Hour, 7 * 24 * time.Hour} {
+		args = append(args, now, sqlite.Dialect{}.TimeValue(reference.Add(-limit)))
+	}
+	return append(args, now, now)
+}
+
 // TestTranslateItemQueryScalarClockBoundaries rejects hidden clock behavior
 // and pins source inclusivity at exact start/end boundaries.
 func TestTranslateItemQueryScalarClockBoundaries(t *testing.T) {
@@ -115,7 +127,7 @@ func TestTranslateItemQueryScalarClockBoundaries(t *testing.T) {
 		want  string
 		args  []any
 	}{
-		{"airing includes both exact endpoints", store.ItemQuery{IsAiring: &trueValue, ReferenceTime: &at}, "start_date <=", []any{sqlite.Dialect{}.TimeValue(at), sqlite.Dialect{}.TimeValue(at)}},
+		{"airing includes both exact endpoints", store.ItemQuery{IsAiring: &trueValue, ReferenceTime: &at}, "start_date <=", sqliteAiringArgs(at)},
 		{"not airing uses source's strict outside conjunction", store.ItemQuery{IsAiring: &falseValue, ReferenceTime: &at}, "start_date >", []any{sqlite.Dialect{}.TimeValue(at), sqlite.Dialect{}.TimeValue(at)}},
 		{"has aired includes the end boundary", store.ItemQuery{HasAired: &trueValue, ReferenceTime: &at}, "end_date <=", []any{sqlite.Dialect{}.TimeValue(at)}},
 		{"not aired excludes the end boundary", store.ItemQuery{HasAired: &falseValue, ReferenceTime: &at}, "end_date >", []any{sqlite.Dialect{}.TimeValue(at)}},

@@ -40,3 +40,6 @@ func (unsupportedDialect) TextCollation(string) string          { return "" }
 func (unsupportedDialect) EscapeLike(string) string             { return "" }
 func (unsupportedDialect) SearchClause(string, string) string   { return "" }
 func (unsupportedDialect) ContainsClause(string, string) string { return "" }
+func (unsupportedDialect) SpanAtMost(string, string, time.Duration) string {
+	return ""
+}
