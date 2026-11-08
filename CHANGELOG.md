@@ -29,6 +29,12 @@ newest release or release candidate. `:latest` follows the newest release.
   server does not scan at start; as in Jellyfin, the scheduled Scan Media
   Library task first runs one hour after start. Step 5 now says to start the
   scan by hand, and a test pins the schedule (#876).
+- A transcode worker job now survives a server restart when a client asks
+  for the next segment before the worker reconnects (#861). Before, the
+  request started a new transcode for the playlist, and the server refused
+  and killed the worker's job when it came back. Now the request waits, for
+  up to 10 s and not past the job lease, until the worker presents the job
+  or reconnects without it, and then joins the adopted job.
 
 ## [0.4.0-rc.1] - 2026-11-06
 

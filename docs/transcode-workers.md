@@ -75,7 +75,9 @@ The worker's ffmpeg major version must equal the server's. Use the same
 Deadfin version, or jellyfin-ffmpeg of the same major version, on both.
 
 A worker keeps its jobs through a server restart for the job lease
-(`DEADFIN_TRANSCODE_JOB_LEASE`, 60 s). For the client to keep its play
+(`DEADFIN_TRANSCODE_JOB_LEASE`, 60 s). A segment request that comes before
+the worker reconnects waits for the worker, for up to 10 s and not past the
+lease, and then joins the adopted job. For the client to keep its play
 session through the restart, turn on the play session reload:
 
 ```

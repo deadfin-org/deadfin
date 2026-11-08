@@ -11,7 +11,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// maxAdoptionWait bounds how long one HLS request waits for the worker of a
+// kept family to present the family again (#861). A worker retries its
+// connection every 2 s.
+const maxAdoptionWait = 10 * time.Second
 
 // KeptFamily names the files of one remote HLS family that the startup wipe
 // keeps (#618): the playlist and every file in its directory that starts with
@@ -19,6 +25,106 @@ import (
 type KeptFamily struct {
 	Playlist       string
 	SegmentPattern string
+	// WorkerID and LeaseExpires name the worker that keeps the family
+	// and the end of its job lease. With a lease, an HLS request for the
+	// playlist waits for the adoption before it starts a new family
+	// (#861).
+	WorkerID     string
+	LeaseExpires time.Time
+}
+
+// keptAdoption is a kept family that its worker has not presented yet.
+// done closes when the family is adopted or the wait ends.
+type keptAdoption struct {
+	workerID string
+	expires  time.Time
+	done     chan struct{}
+}
+
+// keptAdoptions indexes the kept families that have a lease by their
+// canonical playlist path.
+func (manager *TranscodeManager) keptAdoptions(keep []KeptFamily) map[string]*keptAdoption {
+	adoptions := make(map[string]*keptAdoption)
+	for _, kept := range keep {
+		if kept.LeaseExpires.IsZero() {
+			continue
+		}
+		playlist, err := manager.normalizeOutputPath(kept.Playlist)
+		if err != nil {
+			continue
+		}
+		adoptions[playlist] = &keptAdoption{workerID: kept.WorkerID, expires: kept.LeaseExpires, done: make(chan struct{})}
+	}
+	return adoptions
+}
+
+// awaitAdoption holds an HLS request for a kept family that has no job yet
+// (#861). After a server restart a client can ask for the next segment
+// before the worker reconnects; a new family then takes the playlist and
+// the worker's family is refused and killed. The request waits until the
+// family is adopted, the worker reconnects without it, the lease ends, or
+// maxAdoptionWait passes. It then continues as before.
+func (manager *TranscodeManager) awaitAdoption(ctx context.Context, playlist string) error {
+	manager.mu.Lock()
+	pending := manager.adoptions[playlist]
+	if pending == nil || manager.jobs[playlist] != nil {
+		manager.mu.Unlock()
+		return nil
+	}
+	now := manager.options.Clock.Now()
+	deadline := now.Add(maxAdoptionWait)
+	if pending.expires.Before(deadline) {
+		deadline = pending.expires
+	}
+	if !now.Before(deadline) {
+		manager.endAdoptionLocked(playlist)
+		manager.mu.Unlock()
+		return nil
+	}
+	timer := manager.options.Clock.NewTimer(deadline.Sub(now))
+	manager.mu.Unlock()
+	defer timer.Stop()
+	if manager.beforeAdoptionWait != nil {
+		manager.beforeAdoptionWait()
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-pending.done:
+		return nil
+	case <-timer.C():
+	}
+	manager.mu.Lock()
+	ended := manager.adoptions[playlist] == pending
+	if ended {
+		manager.endAdoptionLocked(playlist)
+	}
+	manager.mu.Unlock()
+	if logger := manager.options.Logger; ended && logger != nil {
+		logger.Info("HLS request stopped waiting for a kept remote family; starting a new one", "output", playlist, "worker", pending.workerID)
+	}
+	return nil
+}
+
+// endAdoptionLocked ends the wait for one kept family.
+func (manager *TranscodeManager) endAdoptionLocked(playlist string) {
+	if pending := manager.adoptions[playlist]; pending != nil {
+		delete(manager.adoptions, playlist)
+		close(pending.done)
+	}
+}
+
+// EndAdoptionWait ends the wait for every kept family of workerID that is
+// not adopted (#861). The hub calls it after the worker presented the jobs
+// it kept: a family that the worker did not present does not come back.
+func (manager *TranscodeManager) EndAdoptionWait(workerID string) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	for playlist, pending := range manager.adoptions {
+		if pending.workerID == workerID {
+			manager.endAdoptionLocked(playlist)
+		}
+	}
 }
 
 // clearTranscodes empties directory, except the files of keep. Without keep
@@ -146,6 +252,7 @@ func (manager *TranscodeManager) AdoptHLS(ctx context.Context, request AdoptHLSR
 	}
 	remote := request.Remote(sidecars.destination)
 	manager.jobs[spec.playlist] = job
+	manager.endAdoptionLocked(spec.playlist)
 	manager.registerHLSSessionLocked(job)
 	manager.attachRemoteLocked(job, remote, sidecars)
 	manager.addWorkerLocked()

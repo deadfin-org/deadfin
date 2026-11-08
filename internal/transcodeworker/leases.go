@@ -114,7 +114,9 @@ func (job *remoteJob) Release() bool {
 	return job.finish(ffmpeg.ErrRunnerReleased)
 }
 
-// reattach answers the jobs a reconnected worker kept running.
+// reattach answers the jobs a reconnected worker kept running. Then no
+// other job of the worker comes back, so the HLS requests that wait for
+// one start a new family (#861).
 func (hub *Hub) reattach(conn *workerConn, held []HeldJob) {
 	if len(held) > maxWorkerJobs {
 		held = held[:maxWorkerJobs]
@@ -129,6 +131,12 @@ func (hub *Hub) reattach(conn *workerConn, held []HeldJob) {
 		_ = conn.enqueue(Message{Type: TypeJobAdopted, JobID: entry.JobID, LeaseMillis: hub.config.Lease.Milliseconds()})
 		hub.observe(Event{Kind: EventJobAdopted, WorkerID: conn.id, Name: conn.name, JobID: entry.JobID})
 		hub.logger().Info("transcode worker job adopted after a server restart", "worker", conn.name, "job", entry.JobID, "next_segment", entry.NextSegment)
+	}
+	hub.mu.Lock()
+	adopter, workerID := hub.adopter, conn.id
+	hub.mu.Unlock()
+	if adopter != nil {
+		adopter.EndAdoptionWait(workerID)
 	}
 }
 

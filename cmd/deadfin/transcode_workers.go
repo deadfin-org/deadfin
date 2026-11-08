@@ -200,8 +200,9 @@ func transcodeJobLease(getenv func(string) string) (time.Duration, error) {
 }
 
 // keptTranscodeFamilies returns the families of the job records with a live
-// lease (#618), so the startup wipe keeps their files for the adoption. It
-// deletes the expired records first.
+// lease (#618), so the startup wipe keeps their files for the adoption and
+// a segment request waits for the adoption (#861). It deletes the expired
+// records first.
 func keptTranscodeFamilies(ctx context.Context, workers *store.TranscodeWorkerStore, now time.Time) ([]ffmpeg.KeptFamily, error) {
 	if err := workers.DeleteExpiredJobs(ctx, now); err != nil {
 		return nil, err
@@ -212,7 +213,7 @@ func keptTranscodeFamilies(ctx context.Context, workers *store.TranscodeWorkerSt
 	}
 	kept := make([]ffmpeg.KeptFamily, 0, len(jobs))
 	for _, job := range jobs {
-		kept = append(kept, ffmpeg.KeptFamily{Playlist: job.Playlist, SegmentPattern: job.SegmentPattern})
+		kept = append(kept, ffmpeg.KeptFamily{Playlist: job.Playlist, SegmentPattern: job.SegmentPattern, WorkerID: job.WorkerID, LeaseExpires: job.LeaseExpires})
 	}
 	return kept, nil
 }

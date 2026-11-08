@@ -435,6 +435,13 @@ func (manager *TranscodeManager) startHLS(ctx context.Context, request HLSReques
 			return fmt.Errorf("HLS playlist %q has exited; use RestartHLSAt", spec.playlist)
 		}
 		leader := !exists
+		if leader && manager.adoptions[spec.playlist] != nil {
+			manager.mu.Unlock()
+			if err := manager.awaitAdoption(ctx, spec.playlist); err != nil {
+				return err
+			}
+			continue
+		}
 		if leader && startAdmission && !beforeRegisterCalled {
 			beforeRegisterCalled = true
 			manager.mu.Unlock()
@@ -1036,6 +1043,9 @@ func (manager *TranscodeManager) RestartHLSAt(ctx context.Context, request HLSRe
 	manager.mu.Unlock()
 	if stopped {
 		return errors.New("HLS play session stopped during restart")
+	}
+	if err := manager.awaitAdoption(ctx, spec.playlist); err != nil {
+		return err
 	}
 	manager.mu.Lock()
 	job := manager.jobs[spec.playlist]

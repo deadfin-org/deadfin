@@ -97,7 +97,7 @@ func (rig *restartRig) start(t *testing.T, withManager bool) *generation {
 		}
 		var kept []ffmpeg.KeptFamily
 		for _, job := range live {
-			kept = append(kept, ffmpeg.KeptFamily{Playlist: job.Playlist, SegmentPattern: job.SegmentPattern})
+			kept = append(kept, ffmpeg.KeptFamily{Playlist: job.Playlist, SegmentPattern: job.SegmentPattern, WorkerID: job.WorkerID, LeaseExpires: job.LeaseExpires})
 		}
 		g.manager, err = ffmpeg.NewTranscodeManager("ffmpeg", rig.dir, ffmpeg.TranscodeManagerOptions{
 			Clock: rig.clock, LogDirectory: rig.logs, RemoteRunner: hub, KeepFamilies: kept,
@@ -334,6 +334,88 @@ func TestHeldJobSurvivesAServerRestart(t *testing.T) {
 		_, err := rig.workers.Job(context.Background(), job.spec.ID)
 		return errors.Is(err, store.ErrNotFound)
 	})
+}
+
+// TestSegmentRequestBeforeTheWorkerReconnectsJoinsTheHeldJob (#861): the
+// client asks for the next segment before the worker reconnects to the next
+// server process. The request waits for the worker, the job is adopted, and
+// the request joins it: the worker launches no new ffmpeg and the server
+// refuses nothing.
+func TestSegmentRequestBeforeTheWorkerReconnectsJoinsTheHeldJob(t *testing.T) {
+	token := mustToken(t)
+	rig := newRestartRig(t, token)
+	first := rig.start(t, true)
+	worker := rig.agent(t, token)
+	first.waitEvent(t, EventRegistered)
+
+	request := rig.hlsRequest(t)
+	if err := first.manager.StartHLS(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	process := worker.process(t)
+	process.write(t, "abc0.ts", "zero")
+	process.write(t, "abc1.ts", "on")
+	eventually(t, worker.poll, func() bool {
+		_, err := os.Stat(filepath.Join(rig.dir, "abc1.ts"))
+		return err == nil
+	})
+	job := worker.heldJob(t)
+	first.stop(t, rig)
+	eventually(t, nil, job.detached)
+	process.write(t, "abc1.ts", "one")
+	process.write(t, "abc2.ts", "tw")
+	for range 5 {
+		worker.poll()
+	}
+
+	second := rig.start(t, true)
+	restarted := make(chan error, 1)
+	go func() { restarted <- second.manager.RestartHLSAt(t.Context(), request, 1) }()
+	reconnect(t, worker, second, EventJobAdopted)
+	select {
+	case err := <-restarted:
+		if err != nil {
+			t.Fatalf("segment request across the restart: %v", err)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("the segment request did not join the adopted job")
+	}
+	noLaunch(t, worker)
+	for drained := false; !drained; {
+		select {
+		case event := <-second.events:
+			if event.Kind == EventJobRefused {
+				t.Fatalf("the server refused the held job: %s", event.Detail)
+			}
+		default:
+			drained = true
+		}
+	}
+	eventually(t, worker.poll, func() bool {
+		data, err := os.ReadFile(filepath.Join(rig.dir, "abc1.ts"))
+		_, growing := os.Stat(filepath.Join(rig.dir, "abc2.ts"))
+		return err == nil && tsText(data) == "one" && growing == nil
+	})
+	if got := readSegment(t, second.manager, request.PlaylistPath, 1); got != "one" {
+		t.Fatalf("segment 1 after the restart = %q, want the held segment", got)
+	}
+
+	stopped := make(chan error, 1)
+	go func() { stopped <- second.manager.StopPlaySession(context.Background(), "play", "device") }()
+	eventually(t, worker.poll, func() bool {
+		process.mu.Lock()
+		defer process.mu.Unlock()
+		return strings.Contains(process.stdin.String(), "q")
+	})
+	process.end(nil)
+	select {
+	case err := <-stopped:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("StopPlaySession did not return")
+	}
 }
 
 // TestHeldJobStopsAtLeaseExpiry: with no server, the worker stops a held

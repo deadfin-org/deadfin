@@ -107,7 +107,9 @@ type TranscodeManager struct {
 	hlsLocks              map[string]*sync.Mutex
 	hlsLockUsers          map[string]int
 	hlsSessions           map[string]map[*transcodeJob]struct{}
-	closed                bool
+	// adoptions are the kept families that wait for their workers (#861).
+	adoptions map[string]*keptAdoption
+	closed    bool
 
 	workers     sync.WaitGroup
 	workerCount int
@@ -127,6 +129,7 @@ type TranscodeManager struct {
 	beforeHLSRestartRegister func()
 	beforeHLSWaitRetain      func()
 	beforeHLSStartRegister   func()
+	beforeAdoptionWait       func()
 	beforeCleanupAttemptDone func()
 	hlsLogOpen               func(*transcodeJob) (*os.File, error)
 	stdinPipe                func(*exec.Cmd) (io.WriteCloser, error)
@@ -261,7 +264,7 @@ func NewTranscodeManager(ffmpegPath, transcodesDir string, options TranscodeMana
 		}
 	}
 	handoffCtx, handoffCancel := context.WithCancel(context.Background())
-	return &TranscodeManager{
+	manager := &TranscodeManager{
 		handoffCtx:            handoffCtx,
 		handoffCancel:         handoffCancel,
 		ffmpegPath:            ffmpegPath,
@@ -276,7 +279,9 @@ func NewTranscodeManager(ffmpegPath, transcodesDir string, options TranscodeMana
 		hlsLockUsers:          make(map[string]int),
 		hlsSessions:           make(map[string]map[*transcodeJob]struct{}),
 		shutdownDone:          make(chan struct{}),
-	}, nil
+	}
+	manager.adoptions = manager.keptAdoptions(options.KeepFamilies)
+	return manager, nil
 }
 
 func progressiveDefaults(options TranscodeManagerOptions) TranscodeManagerOptions {
@@ -1489,6 +1494,9 @@ func (manager *TranscodeManager) Close(ctx context.Context) error {
 	wasClosed := manager.closed
 	if !manager.closed {
 		manager.closed = true
+		for playlist := range manager.adoptions {
+			manager.endAdoptionLocked(playlist)
+		}
 		jobs := make([]*transcodeJob, 0, len(manager.jobs))
 		exitedHLS := make([]*transcodeJob, 0)
 		for _, job := range manager.jobs {

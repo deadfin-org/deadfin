@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/deadfin-org/deadfin/internal/clock"
 	"github.com/deadfin-org/deadfin/internal/dto"
 )
 
@@ -180,5 +181,171 @@ func TestReleasedRemoteFamilyIsAdoptedByTheNextManager(t *testing.T) {
 	adopted.end(nil)
 	if err := <-stopped; err != nil {
 		t.Fatalf("StopPlaySession: %v", err)
+	}
+}
+
+// keptFamilyManager starts a manager after a restart: the worker of the
+// kept family "kept" holds it to lease, and has not reconnected yet (#861).
+// The returned channel receives each request that waits for the adoption.
+func keptFamilyManager(t *testing.T, fixture hlsFixture, runner RemoteRunner, testClock *clock.Fake, lease time.Duration) (*TranscodeManager, HLSRequest, <-chan struct{}) {
+	t.Helper()
+	request := fixture.request("kept", 4)
+	if err := os.MkdirAll(fixture.dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fixture.writePlaylist(t, request)
+	for index := 0; index < 3; index++ {
+		fixture.writeSegment(t, request, index, "kept segment")
+	}
+	manager, err := NewTranscodeManager(fixture.ffmpeg, fixture.dir, TranscodeManagerOptions{
+		Clock: testClock, KillGracePeriod: 5 * time.Second, RemoteRunner: runner,
+		KeepFamilies: []KeptFamily{{
+			Playlist: request.PlaylistPath, SegmentPattern: request.SegmentPattern,
+			WorkerID: "worker-1", LeaseExpires: testClock.Now().Add(lease),
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiting := make(chan struct{}, 4)
+	manager.beforeAdoptionWait = func() { waiting <- struct{}{} }
+	return manager, request, waiting
+}
+
+func receiveAdoptionWait(t *testing.T, waiting <-chan struct{}, results <-chan error) {
+	t.Helper()
+	select {
+	case <-waiting:
+	case err := <-results:
+		t.Fatalf("the segment request started a new family before the worker of the kept family returned: %v", err)
+	case <-time.After(fixtureTimeout):
+		t.Fatal("the segment request did not wait for the worker of the kept family")
+	}
+}
+
+func receiveRestart(t *testing.T, results <-chan error) {
+	t.Helper()
+	select {
+	case err := <-results:
+		if err != nil {
+			t.Fatalf("RestartHLSAt: %v", err)
+		}
+	case <-time.After(fixtureTimeout):
+		t.Fatal("the segment request did not continue")
+	}
+}
+
+func stopRemoteSession(t *testing.T, manager *TranscodeManager, request HLSRequest, process *fakeRemoteProcess) {
+	t.Helper()
+	stopped := make(chan error, 1)
+	go func() {
+		stopped <- manager.StopPlaySession(context.Background(), request.PlaySessionID, request.DeviceID)
+	}()
+	select {
+	case <-process.quit:
+	case <-time.After(fixtureTimeout):
+		t.Fatal("stop did not forward q to the remote family")
+	}
+	process.end(nil)
+	if err := <-stopped; err != nil {
+		t.Fatalf("StopPlaySession: %v", err)
+	}
+}
+
+// TestSegmentRequestWaitsForTheKeptFamilyAdoption (#861): after a server
+// restart a client asks for the next segment before the worker reconnects.
+// The request waits; the worker presents its family, the family is
+// adopted, and the request joins it. No new family starts, so the worker's
+// family is not refused.
+func TestSegmentRequestWaitsForTheKeptFamilyAdoption(t *testing.T) {
+	fixture := newHLSFixture(t, "hold")
+	testClock := clock.NewFake(time.Unix(1_800_000_000, 0))
+	runner := newFakeRemoteRunner()
+	manager, request, waiting := keptFamilyManager(t, fixture, runner, testClock, 60*time.Second)
+	defer closeHLSManager(t, manager)
+
+	results := make(chan error, 1)
+	go func() { results <- manager.RestartHLSAt(context.Background(), request, 3) }()
+	receiveAdoptionWait(t, waiting, results)
+	testClock.Advance(time.Second)
+
+	adopted := &fakeRemoteProcess{done: make(chan struct{}), quit: make(chan struct{})}
+	if err := manager.AdoptHLS(context.Background(), AdoptHLSRequest{
+		PlaylistPath: request.PlaylistPath, SegmentPattern: request.SegmentPattern,
+		PlaySessionID: request.PlaySessionID, DeviceID: request.DeviceID, SegmentLengthSeconds: 4,
+		Remote: func(stderr io.WriteCloser) RemoteProcess {
+			adopted.job = RemoteHLSJob{Directory: fixture.dir, Stderr: stderr}
+			return adopted
+		},
+	}); err != nil {
+		t.Fatalf("adopt the kept family: %v", err)
+	}
+	receiveRestart(t, results)
+	if calls := runner.callCount(); calls != 0 {
+		t.Fatalf("remote starts = %d, want 0: a new family took the playlist", calls)
+	}
+	if got := hlsStartCount(t, fixture, "kept"); got != 0 {
+		t.Fatalf("local ffmpeg started %d times for a kept family", got)
+	}
+	adopted.write(t, "kept3.ts", "segment three")
+	adopted.write(t, "kept4.ts", "")
+	file, err := manager.WaitSegment(context.Background(), request.PlaylistPath, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := readHLSSegment(t, file); got != "segment three" {
+		t.Fatalf("segment 3 = %q", got)
+	}
+	closeHLSSegment(t, file)
+	stopRemoteSession(t, manager, request, adopted)
+}
+
+// TestSegmentRequestStopsWaitingForAKeptFamily (#861): the wait ends when
+// the worker reconnects without the family, when the lease ends, or after
+// maxAdoptionWait. The request then starts a new family.
+func TestSegmentRequestStopsWaitingForAKeptFamily(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		lease time.Duration
+		end   func(*TranscodeManager, *clock.Fake)
+	}{
+		{"worker returns without the family", 60 * time.Second, func(manager *TranscodeManager, _ *clock.Fake) {
+			manager.EndAdoptionWait("worker-2")
+			manager.EndAdoptionWait("worker-1")
+		}},
+		{"lease ends", 3 * time.Second, func(_ *TranscodeManager, testClock *clock.Fake) {
+			testClock.Advance(3 * time.Second)
+		}},
+		{"wait limit", 60 * time.Second, func(_ *TranscodeManager, testClock *clock.Fake) {
+			testClock.Advance(maxAdoptionWait)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newHLSFixture(t, "hold")
+			testClock := clock.NewFake(time.Unix(1_800_000_000, 0))
+			runner := newFakeRemoteRunner(nil)
+			manager, request, waiting := keptFamilyManager(t, fixture, runner, testClock, test.lease)
+			defer closeHLSManager(t, manager)
+
+			results := make(chan error, 1)
+			go func() { results <- manager.RestartHLSAt(context.Background(), request, 3) }()
+			receiveAdoptionWait(t, waiting, results)
+			if calls := runner.callCount(); calls != 0 {
+				t.Fatalf("remote starts = %d while the request waits", calls)
+			}
+			test.end(manager, testClock)
+			process := runner.receive(t)
+			receiveRestart(t, results)
+			err := manager.AdoptHLS(context.Background(), AdoptHLSRequest{
+				PlaylistPath: request.PlaylistPath, SegmentPattern: request.SegmentPattern, SegmentLengthSeconds: 4,
+				Remote: func(io.WriteCloser) RemoteProcess {
+					return &fakeRemoteProcess{done: make(chan struct{}), quit: make(chan struct{})}
+				},
+			})
+			if err == nil {
+				t.Fatal("a late adoption replaced the new family")
+			}
+			stopRemoteSession(t, manager, request, process)
+		})
 	}
 }

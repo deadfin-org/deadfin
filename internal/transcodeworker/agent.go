@@ -476,7 +476,8 @@ func (agent *Agent) runSession(parent context.Context) error {
 }
 
 // sendHeld lists the jobs that the worker kept running without a server,
-// so the server adopts or kills each one.
+// so the server adopts or kills each one. An empty list tells the server
+// that no job comes back (#861).
 func (s *session) sendHeld() {
 	agent := s.agent
 	agent.jobsMu.Lock()
@@ -485,9 +486,6 @@ func (s *session) sendHeld() {
 		jobs = append(jobs, job)
 	}
 	agent.jobsMu.Unlock()
-	if len(jobs) == 0 {
-		return
-	}
 	held := make([]HeldJob, 0, len(jobs))
 	for _, job := range jobs {
 		held = append(held, job.heldState())

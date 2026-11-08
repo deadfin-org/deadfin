@@ -209,6 +209,9 @@ type JobStore interface {
 // *ffmpeg.TranscodeManager implements it.
 type Adopter interface {
 	AdoptHLS(ctx context.Context, request ffmpeg.AdoptHLSRequest) error
+	// EndAdoptionWait ends the wait of the HLS requests for the kept
+	// families of a worker that has presented its jobs (#861).
+	EndAdoptionWait(workerID string)
 }
 
 // Event is one hub lifecycle event.
