@@ -155,6 +155,14 @@ func connectionConfig(dsn, schema string) (*pgx.ConnConfig, error) {
 	if _, ok := config.RuntimeParams["jit"]; !ok {
 		config.RuntimeParams["jit"] = "off"
 	}
+	// pgx caches prepared statements. After five runs PostgreSQL may switch
+	// a cached statement to a generic plan, which cannot see the parameter
+	// values. For skewed item columns such a plan can read every programme
+	// of a Live TV folder instead of the few that air now (#892). Sessions
+	// plan each run with its values unless the DSN sets plan_cache_mode.
+	if _, ok := config.RuntimeParams["plan_cache_mode"]; !ok {
+		config.RuntimeParams["plan_cache_mode"] = "force_custom_plan"
+	}
 	return config, nil
 }
 

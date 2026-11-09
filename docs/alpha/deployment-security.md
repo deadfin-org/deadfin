@@ -65,10 +65,9 @@ URL contains credentials. Use a secret store or an operator-readable environment
 file outside version control; restrict access to the container definition,
 deployment API, and process environment. PostgreSQL needs a private database
 and schema with the `CREATE` privilege. Use TLS to a remote database. Back up
-both PostgreSQL and the Deadfin data root. Do not use the same writable data
-directory from two replicas. For the alpha, run one replica even with
-PostgreSQL; concurrent server behavior has not been established as a supported
-HA deployment.
+both PostgreSQL and the Deadfin data root. With SQLite, run one replica. With
+PostgreSQL, two or more replicas can run on one shared data root (D-121).
+`docs/transcode-workers.md` §5 lists the settings and the current limits.
 
 Optional variables include `TMDB_API_KEY`, `AUDIODB_API_KEY`,
 `LISTENBRAINZ_TOKEN`, `LISTENBRAINZ_SERVER`, `DEADFIN_LOG_LEVEL`,

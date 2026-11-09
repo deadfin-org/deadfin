@@ -3,6 +3,7 @@
 package storetest_test
 
 import (
+	"database/sql"
 	"fmt"
 	"reflect"
 	"strings"
@@ -277,6 +278,21 @@ func TestLiveTvAiringSQLite(t *testing.T) {
 // DEADFIN_TEST_POSTGRES_DSN is set.
 func TestLiveTvAiringPostgres(t *testing.T) {
 	runLiveTvAiring(t, storetest.OpenPostgres(t))
+}
+
+// TestPostgresSessionsPlanEachRun checks that pooled sessions plan each run
+// of a cached statement with its values (#892).
+func TestPostgresSessionsPlanEachRun(t *testing.T) {
+	stores := storetest.OpenPostgres(t)
+	for _, pool := range []*sql.DB{stores.Reader(), stores.Writer()} {
+		var mode string
+		if err := pool.QueryRowContext(t.Context(), "SHOW plan_cache_mode").Scan(&mode); err != nil {
+			t.Fatalf("show plan_cache_mode: %v", err)
+		}
+		if mode != "force_custom_plan" {
+			t.Errorf("plan_cache_mode %q, want force_custom_plan", mode)
+		}
+	}
 }
 
 func runLiveTvAiring(t *testing.T, stores store.Stores) {

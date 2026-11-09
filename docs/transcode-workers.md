@@ -216,9 +216,19 @@ rolling update does not interrupt playback (D-121).
 - Set `DEADFIN_REPLICA_URL` on each replica to the URL at which the other
   replicas reach it, for example `http://$(POD_IP):8096` from the Kubernetes
   downward API. Keep that address on a private network.
-- Give the replicas one transcode directory (one shared volume for the
-  program data or for `cache/transcodes`). A remote HLS job then moves to
-  the next replica with no restart.
+- Give the replicas one shared data root: the whole program data
+  directory, including `config`, `root`, `data`, `metadata` and
+  `cache/transcodes`, on one volume that every replica mounts read-write at
+  the same path. A data root per replica is not supported: a replica that
+  does not find a library folder on its own disk removes that library from
+  the database. With one data root, a remote HLS job also moves to the next
+  replica with no restart.
+- Each replica reads the server settings (`system.xml`, `encoding.xml`,
+  `network.xml`) at startup. After a settings change on one replica,
+  restart the others, and make settings changes on one replica only
+  (#897).
+- Each replica runs the scheduled tasks, such as the library scan, on its
+  own schedule (#898). Start a manual scan on one replica only.
 - Use a Deployment with `strategy: RollingUpdate`, `maxSurge: 1` and
   `maxUnavailable: 0`, and a `terminationGracePeriodSeconds` of at least 30.
 - Point the workers and the clients at the Service.
