@@ -225,7 +225,7 @@ func runServer(ctx context.Context, listen, programData string, ready chan<- str
 	if nvidia.Device {
 		log.Printf("deadfin: CUDA device 0 accepts NVENC encoders %v", nvidia.Encoders)
 	}
-	options = append([]applicationOption{withImageProcessor(processor), withTileComposer(tileComposer), withEncodingCapabilities(encodingCapabilities(probedCapabilities, nvidia))}, options...)
+	options = append([]applicationOption{withImageProcessor(processor), withTileComposer(tileComposer), withCollageBuilder(images.NewCollageBuilder(imageRuntime)), withEncodingCapabilities(encodingCapabilities(probedCapabilities, nvidia))}, options...)
 	app, err := newApplicationWithListen(ctx, programData, listener.Addr().String(), options...)
 	if err != nil {
 		_ = listener.Close()
@@ -249,11 +249,7 @@ func runServer(ctx context.Context, listen, programData string, ready chan<- str
 		// config.LoadOrCreateServerIdentity. Replaying that load here ensures
 		// the UDP discovery ID matches /System/Info/Public instead of the
 		// default process constant.
-		hostname, hostErr := os.Hostname()
-		if hostErr != nil {
-			return fmt.Errorf("resolve hostname for discovery identity: %w", hostErr)
-		}
-		persisted, idErr := config.LoadOrCreateServerIdentity(paths, "", hostname, rand.Reader)
+		persisted, idErr := config.LoadOrCreateServerIdentity(paths, "", rand.Reader)
 		if idErr != nil {
 			return fmt.Errorf("load installation identity for discovery: %w", idErr)
 		}

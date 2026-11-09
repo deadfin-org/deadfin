@@ -2,12 +2,16 @@
 
 package handlers
 
-import _ "embed"
+import (
+	_ "embed"
+
+	"github.com/deadfin-org/deadfin/internal/config"
+)
 
 // serverVersion is the Deadfin server version, which in-tree plugins inherit
-// from the assembly in the pinned Jellyfin 12 source. It matches the version
-// reported by SystemInfo (config.DefaultServerIdentity).
-const serverVersion = "12.0.0"
+// from the assembly in the pinned Jellyfin 12 source. It is the version
+// reported by SystemInfo.
+const serverVersion = config.JellyfinVersion
 
 //go:embed pluginpages/tmdb/config.html
 var tmdbConfigHTML string

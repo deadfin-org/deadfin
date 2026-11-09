@@ -13,6 +13,16 @@ import (
 	"github.com/deadfin-org/deadfin/internal/dto"
 )
 
+// JellyfinVersion is the Jellyfin server version that Deadfin reports to
+// clients (D-128). Clients compare it with the API version they were
+// generated from: Swiftfin warns below its SDK version.
+const JellyfinVersion = "12.1.0"
+
+// DefaultServerName is the name Deadfin reports when ServerName is empty
+// (D-129). It is the same on every replica and after every container
+// recreate, where the hostname is not.
+const DefaultServerName = "Deadfin"
+
 // ServerIdentity is the stable public identity advertised to Jellyfin clients.
 // It is constructed at the composition root and injected into HTTP handlers.
 type ServerIdentity struct {
@@ -52,12 +62,12 @@ func (identity ServerIdentity) Validate() error {
 // by route-ledger composition that does not open a program-data root.
 func DefaultServerIdentity() ServerIdentity {
 	return ServerIdentity{
-		ServerName: "Deadfin",
+		ServerName: DefaultServerName,
 		ID: dto.UUID{
 			0x6e, 0xc4, 0x5b, 0xa1, 0x41, 0x8d, 0x4f, 0x6b,
 			0x8a, 0xe8, 0xe8, 0xc6, 0x4b, 0xc6, 0xb5, 0x98,
 		},
-		Version: "12.0.0",
+		Version: JellyfinVersion,
 	}
 }
 
@@ -71,10 +81,10 @@ const deviceFile = "device.txt"
 // A valid pre-existing device.txt is retained. A malformed or nil GUID is
 // replaced with a valid persisted UUIDv4.
 //
-// The configured ServerName wins over the supplied hostname when it is
-// non-empty after trimming. An empty configured name reports the hostname.
+// The configured ServerName wins when it is non-empty after trimming. An
+// empty configured name reports DefaultServerName (D-129).
 // The installation ID never changes after the first start.
-func LoadOrCreateServerIdentity(paths Paths, configuredName, hostname string, entropy io.Reader) (ServerIdentity, error) {
+func LoadOrCreateServerIdentity(paths Paths, configuredName string, entropy io.Reader) (ServerIdentity, error) {
 	id, err := loadOrCreateDeviceID(paths.Data, entropy)
 	if err != nil {
 		return ServerIdentity{}, err
@@ -82,10 +92,10 @@ func LoadOrCreateServerIdentity(paths Paths, configuredName, hostname string, en
 
 	name := strings.TrimSpace(configuredName)
 	if name == "" {
-		name = hostname
+		name = DefaultServerName
 	}
 
-	return NewServerIdentity(name, id, "12.0.0")
+	return NewServerIdentity(name, id, JellyfinVersion)
 }
 
 // loadOrCreateDeviceID reads data/device.txt, validates the cached GUID, and

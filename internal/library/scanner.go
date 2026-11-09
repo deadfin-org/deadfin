@@ -1193,6 +1193,10 @@ func (s *Scanner) scanLocked(ctx context.Context, opts RefreshOptions) (result R
 		result.add(failed)
 		record(failed)
 	}
+	for _, failed := range s.refreshCollectionFolderImages(scanCtx, folders) {
+		result.add(failed)
+		record(failed)
+	}
 	if err := scanCtx.Err(); err != nil {
 		return result, progress, err
 	}
@@ -3162,6 +3166,13 @@ func (s *Scanner) persistVirtualIfChanged(ctx context.Context, desired item.Item
 		return err
 	}
 	materializeVirtualFolderLifecycle(&desired, &stored, s.options.Now)
+	// A library image (an upload or the generated collage) lives in the
+	// internal metadata directory; the resolved root does not hold it.
+	libraryRoot := ""
+	if desired.Path != nil {
+		libraryRoot = *desired.Path
+	}
+	carryStoredImages(&desired, stored, RefreshOptions{}, libraryRoot)
 	if equivalentVirtualFolder(stored, desired) {
 		return nil
 	}

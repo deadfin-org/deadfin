@@ -42,7 +42,8 @@ type queryFiltersRequest struct {
 // queryFilters ports FilterController.GetQueryFilters
 // (upstream/jellyfin/Jellyfin.Api/Controllers/FilterController.cs:112-252).
 // It returns the genre entities and the audio and subtitle stream languages
-// of the scoped items. Tags stays empty: upstream never sets it.
+// of the scoped items. Tags stays empty, as in pinned upstream; Jellyfin 12.1
+// fills it (D-128).
 //
 // The scope reads only the parent's subtree. A recursive scope under a
 // folder is a recursive ParentId query, which ItemStore drives from an index

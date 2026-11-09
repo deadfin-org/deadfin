@@ -13,8 +13,13 @@ newest release or release candidate. `:latest` follows the newest release.
 
 ## [Unreleased]
 
+## [0.4.0-rc.2] - 2026-11-09
+
 ### Added
 
+- A reference architectures guide: a single node, and two nodes with a
+  floating IP, Caddy, PostgreSQL and a shared data root, with a measured
+  failover. Thanks to Jake-ThomasTech (GitHub #27).
 - The install guide has an example for PostgreSQL with a primary and
   replicas (Patroni): a URL that lists each node, with
   `target_session_attrs=read-write` (#877).
@@ -22,9 +27,26 @@ newest release or release candidate. `:latest` follows the newest release.
 ### Changed
 
 - The docs name PostgreSQL 17 and 18 as tested (#877).
+- The server reports Jellyfin version `12.1.0` instead of `12.0.0`, so
+  Swiftfin no longer warns "Swiftfin requires Jellyfin version 12.1.0 or
+  higher". Jellyfin 12.1 has the same API as 12.0; `/Items/Filters2` still
+  returns an empty `Tags` list (D-128, #902).
+- When `ServerName` is empty, the server reports the name `Deadfin` instead
+  of the hostname, so replicas and recreated containers show the same name
+  (D-129, #902).
 
 ### Fixed
 
+- Item lists now carry the parent and series images that clients use when an
+  item has no image of its own: `SeriesPrimaryImageTag`, `ParentPrimaryImage*`,
+  `ParentBackdrop*`, `ParentLogo*`, `ParentThumb*` and `AlbumPrimaryImageTag`.
+  Seasons without a poster show the series poster, episode cards get the
+  series backdrop or thumb, and songs show the album cover (#903).
+- Library views have a Primary image again: a library scan draws a collage
+  of the library's items with the library name, as Jellyfin does (D-130). A
+  library image no longer disappears on the next scan (#903).
+- `LockData` reports whether the item is locked; it was true for every item
+  (#903).
 - A remote image that failed to download (for example an IPTV channel logo)
   returned an unlogged 500 and was downloaded again on every request. The
   server now logs the failure with the host and status. A source that answers
@@ -437,7 +459,8 @@ First release candidate for v0.3.0, the community alpha.
 - The SQLite query for folder played counts uses a faster plan on large
   libraries.
 
-[Unreleased]: https://github.com/deadfin-org/deadfin/compare/v0.4.0-rc.1...HEAD
+[Unreleased]: https://github.com/deadfin-org/deadfin/compare/v0.4.0-rc.2...HEAD
+[0.4.0-rc.2]: https://github.com/deadfin-org/deadfin/compare/v0.4.0-rc.1...v0.4.0-rc.2
 [0.4.0-rc.1]: https://github.com/deadfin-org/deadfin/compare/v0.3.1...v0.4.0-rc.1
 [0.3.1]: https://github.com/deadfin-org/deadfin/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/deadfin-org/deadfin/releases/tag/v0.3.0

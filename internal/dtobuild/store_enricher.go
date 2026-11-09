@@ -87,6 +87,10 @@ func (e storeEnricher) Enrich(ctx context.Context, values []item.Item, options s
 	if err != nil {
 		return nil, err
 	}
+	parents, err := e.parentImages(ctx, values, graph, options)
+	if err != nil {
+		return nil, err
+	}
 	entities, err := e.namedEntities(ctx, values, options)
 	if err != nil {
 		return nil, err
@@ -151,6 +155,7 @@ func (e storeEnricher) Enrich(ctx context.Context, values []item.Item, options s
 	}
 	for _, value := range values {
 		enrichment := imagesEnrichment(value, options)
+		enrichment.parents = parents
 		streams := batch.Streams[value.ID]
 		if wantSources && itemHasMediaSources(value) {
 			records := sourceRecords[value.ID]

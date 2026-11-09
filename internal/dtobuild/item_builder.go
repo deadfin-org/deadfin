@@ -53,6 +53,9 @@ type Enrichment struct {
 	BackdropImageTags  []string
 	ImageBlurHashes    map[string]map[string]string
 	InheritedImageTags map[string]string
+	// parents holds the page's parent image graph; it is shared by every
+	// enrichment of one Build call.
+	parents *parentImageGraph
 }
 
 // Builder projects persisted item facts into API DTOs. ItemStore is retained as
@@ -163,7 +166,6 @@ func projectDetailDefaults(result *dto.BaseItemDto, value item.Item) {
 	result.EnableMediaSourceDisplay = boolPointer(true)
 	result.PlayAccess = &fullAccess
 	result.DisplayPreferencesID = detailDisplayPreferencesID(value)
-	result.LockData = boolPointer(canManage)
 	result.LockedFields = dtoMetadataFieldsOrEmpty(value.LockedFields)
 	result.ExternalURLs = []dto.ExternalURL{}
 	result.RemoteTrailers = []dto.MediaURL{}
@@ -337,6 +339,7 @@ func projectCore(value item.Item, enrichment Enrichment, options store.ItemQuery
 		result.Etag = baseItemEtag(value)
 	}
 	if hasField(options.Fields, "Settings") {
+		result.LockData = boolPointer(value.IsLocked)
 		result.ForcedSortName = dereference(value.ForcedSortName)
 		result.PreferredMetadataLanguage = dereference(value.PreferredMetadataLanguage)
 		result.PreferredMetadataCountryCode = dereference(value.PreferredMetadataCountryCode)
@@ -524,6 +527,9 @@ func projectCore(value item.Item, enrichment Enrichment, options store.ItemQuery
 	}
 	if options.EnableImages {
 		projectImages(&result, enrichment, options)
+	}
+	if enrichment.parents != nil {
+		applyParentImages(&result, value, enrichment.parents, options)
 	}
 	return result
 }

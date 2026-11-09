@@ -223,7 +223,7 @@ func detailProjectionAssertStockShape(t *testing.T, row map[string]json.RawMessa
 		key("CanDelete", "canDelete"):                               "true",
 		key("EnableMediaSourceDisplay", "enableMediaSourceDisplay"): "true",
 		key("LocalTrailerCount", "localTrailerCount"):               "0",
-		key("LockData", "lockData"):                                 "true",
+		key("LockData", "lockData"):                                 "false",
 		key("PlayAccess", "playAccess"):                             `"Full"`,
 		key("SpecialFeatureCount", "specialFeatureCount"):           "0",
 	} {

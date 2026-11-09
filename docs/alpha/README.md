@@ -2,7 +2,7 @@
 
 Documentation for alpha testers. The image is
 `ghcr.io/deadfin-org/deadfin:alpha` (the newest release or release
-candidate), or a pinned tag such as `:v0.4.0-rc.1`. Report bugs at
+candidate), or a pinned tag such as `:v0.4.0-rc.2`. Report bugs at
 <https://github.com/deadfin-org/deadfin/issues>.
 
 - [faq.md](faq.md): short answers to the first questions.
@@ -17,5 +17,7 @@ candidate), or a pinned tag such as `:v0.4.0-rc.1`. Report bugs at
 - [known-differences.md](known-differences.md): what is different from
   Jellyfin, and the open gaps.
 - [reporting-bugs.md](reporting-bugs.md): what to send when something fails.
+- [reference-architectures.md](reference-architectures.md): two tested
+  layouts, a single node and a two-node HA pair with a floating IP.
 - [client-matrix.md](client-matrix.md): which clients are verified, and the
   steps to test the rest.

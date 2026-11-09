@@ -413,7 +413,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 	if err != nil {
 		return nil, fmt.Errorf("open library media probe: %w", err)
 	}
-	dynamicImages := newDynamicImages(manager, hardware.Current, paths.Metadata)
+	dynamicImages := newDynamicImages(manager, hardware.Current, paths.Metadata, appConfig.collage)
 	scanner, err = library.NewScanner(topology, items, library.NewDefaultChain(naming.DefaultOptions()), library.ScannerOptions{
 		Clock:           realClock,
 		Refresher:       refresher,
@@ -441,11 +441,7 @@ func newApplicationWithListen(ctx context.Context, programData, listen string, o
 	if err != nil {
 		return nil, fmt.Errorf("open library scanner: %w", err)
 	}
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, fmt.Errorf("resolve hostname for installation identity: %w", err)
-	}
-	identityConfig, err := config.LoadOrCreateServerIdentity(paths, "", hostname, rand.Reader)
+	identityConfig, err := config.LoadOrCreateServerIdentity(paths, "", rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("load installation identity: %w", err)
 	}
@@ -989,6 +985,7 @@ type applicationOption func(*applicationConfig)
 type applicationConfig struct {
 	imageProcessor       imageserve.Processor
 	tileComposer         *images.TileComposer
+	collage              *images.CollageBuilder
 	encodingCapabilities encoding.Capabilities
 	hardwareProbe        func(context.Context, encoding.Capabilities, config.EncodingOptions) encoding.Capabilities
 	configurationApplied func(config.Change)
@@ -1912,6 +1909,12 @@ func withImageProcessor(processor imageserve.Processor) applicationOption {
 
 func withTileComposer(composer *images.TileComposer) applicationOption {
 	return func(config *applicationConfig) { config.tileComposer = composer }
+}
+
+// withCollageBuilder supplies the libvips library collage builder of the
+// CollectionFolder image provider.
+func withCollageBuilder(builder *images.CollageBuilder) applicationOption {
+	return func(config *applicationConfig) { config.collage = builder }
 }
 
 func withEncodingCapabilities(capabilities encoding.Capabilities) applicationOption {

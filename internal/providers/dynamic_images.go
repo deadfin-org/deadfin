@@ -64,7 +64,16 @@ type DynamicImagesOptions struct {
 	MetadataPath string
 	// Settings returns the current server settings for an item type name.
 	Settings func(itemType string) DynamicImageSettings
-	Logger   *slog.Logger
+	// Collage draws the library collages (images.CollageBuilder); nil
+	// creates none.
+	Collage ThumbCollager
+	Logger  *slog.Logger
+}
+
+// ThumbCollager draws a landscape library collage
+// (StripCollageBuilder.BuildThumbCollage) and returns it as PNG.
+type ThumbCollager interface {
+	ThumbCollage(ctx context.Context, paths []string, width, height int, libraryName string) ([]byte, error)
 }
 
 // DynamicImages runs upstream's IDynamicImageProvider pass: for videos,
@@ -307,6 +316,61 @@ func (d *DynamicImages) CopyFolderImage(ctx context.Context, source item.Item, t
 		return os.WriteFile(temporaryPath, data, 0o644)
 	})
 	return err == nil, err
+}
+
+// CreateCollectionFolderImage ports CollectionFolderImageProvider.CreateImage
+// for the Primary image: a 960x540 thumb collage of the items with images,
+// saved in the internal metadata directory of target. It reports false when
+// no item has a local image to draw.
+func (d *DynamicImages) CreateCollectionFolderImage(ctx context.Context, target *item.Item, itemsWithImages []item.Item) (bool, error) {
+	if d == nil || target == nil || d.options.Collage == nil || d.options.MetadataPath == "" || len(itemsWithImages) == 0 {
+		return false, nil
+	}
+	paths := d.stripCollageImagePaths(itemsWithImages)
+	if len(paths) == 0 {
+		return false, nil
+	}
+	data, err := d.options.Collage.ThumbCollage(ctx, paths, 960, 540, derefString(target.Name))
+	if err != nil {
+		return false, err
+	}
+	err = d.saveImage(target, item.ImageTypePrimary, ".png", func(temporaryPath string) error {
+		return os.WriteFile(temporaryPath, data, 0o644)
+	})
+	return err == nil, err
+}
+
+// stripCollageImagePaths ports BaseDynamicImageProvider.GetStripCollageImagePaths
+// for a CollectionFolder: each item's first Backdrop, else its Primary, else
+// its Thumb, when it is a local file.
+func (d *DynamicImages) stripCollageImagePaths(values []item.Item) []string {
+	paths := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, imageType := range []item.ImageType{item.ImageTypeBackdrop, item.ImageTypePrimary, item.ImageTypeThumb} {
+			position := imagePositionOf(value.ImageInfos, imageType, 0)
+			if position < 0 {
+				continue
+			}
+			path := value.ImageInfos[position].Path
+			if path == "" || isRemoteImagePath(path) {
+				continue
+			}
+			if rest, found := strings.CutPrefix(path, dynamicMetadataPathToken+"/"); found {
+				path = filepath.Join(d.options.MetadataPath, filepath.FromSlash(rest))
+			}
+			paths = append(paths, path)
+			break
+		}
+	}
+	return paths
+}
+
+// IsDynamicImage reports whether the image is a file in the internal metadata
+// directory of target, which a dynamic image provider may replace
+// (BaseDynamicImageProvider.FetchAsync).
+func (d *DynamicImages) IsDynamicImage(target item.Item, image item.ImageInfo) bool {
+	prefix := filepath.ToSlash(filepath.Join(dynamicMetadataPathToken, internalMetadataRelative(target.ID))) + "/"
+	return strings.HasPrefix(image.Path, prefix)
 }
 
 // saveImage writes one image through write into the item's internal

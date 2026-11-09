@@ -659,28 +659,19 @@ func TestInstallationIdentityNameUpdatePreservesID(t *testing.T) {
 	}
 }
 
-func TestInstallationIdentityDefaultsToHostname(t *testing.T) {
+func TestInstallationIdentityDefaultsToDeadfin(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "program-data")
 	app := newCompositionApplication(t, root)
 
-	hostname, err := os.Hostname()
-	if err != nil {
-		t.Fatalf("os.Hostname: %v", err)
-	}
-	assertPublicServerName(t, app.Router(), hostname)
+	assertPublicServerName(t, app.Router(), config.DefaultServerName)
 }
 
-func TestInstallationIdentityClearedServerNameFallsBackToHostname(t *testing.T) {
+func TestInstallationIdentityClearedServerNameFallsBackToDefault(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "program-data")
 	app := newCompositionApplication(t, root)
 
 	configureComposedAdministrator(t, app.Router())
 	token := loginComposedAdministrator(t, app.Router())
-
-	hostname, err := os.Hostname()
-	if err != nil {
-		t.Fatalf("os.Hostname: %v", err)
-	}
 
 	beforeID := composedPublicServerID(t, app.Router())
 	if beforeID == "" {
@@ -691,7 +682,7 @@ func TestInstallationIdentityClearedServerNameFallsBackToHostname(t *testing.T) 
 	assertPublicServerName(t, app.Router(), "Named Installation")
 
 	updateComposedServerName(t, app.Router(), token, "")
-	assertPublicServerName(t, app.Router(), hostname)
+	assertPublicServerName(t, app.Router(), config.DefaultServerName)
 
 	afterID := composedPublicServerID(t, app.Router())
 	if afterID != beforeID {

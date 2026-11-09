@@ -12,7 +12,7 @@ const (
 	Revision            = "unknown"
 	Dirty               = true
 	BuildTime           = ""
-	CompatibilityTarget = "12.0.0"
+	CompatibilityTarget = "12.1.0"
 	APIVersion          = 1
 )
 

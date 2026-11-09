@@ -157,7 +157,7 @@ func exprString(e ast.Expr) string {
 
 func assertIdentity(t *testing.T, got map[string]string, channel, version, revision, dirty, buildTime string) {
 	t.Helper()
-	want := map[string]string{"Component": "deadfin-server", "Channel": channel, "Version": version, "Revision": revision, "Dirty": dirty, "BuildTime": buildTime, "CompatibilityTarget": "12.0.0", "APIVersion": "1"}
+	want := map[string]string{"Component": "deadfin-server", "Channel": channel, "Version": version, "Revision": revision, "Dirty": dirty, "BuildTime": buildTime, "CompatibilityTarget": "12.1.0", "APIVersion": "1"}
 	for key, value := range want {
 		if got[key] != value {
 			t.Errorf("%s = %q, want %q", key, got[key], value)

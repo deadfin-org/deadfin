@@ -85,7 +85,7 @@ func builderAssertDetailedStockWire(t *testing.T, wire map[string]json.RawMessag
 		}
 	}
 	for field, want := range map[string]string{
-		"CanDelete": "true", "EnableMediaSourceDisplay": "true", "LocalTrailerCount": "0", "LockData": "true", "PlayAccess": `"Full"`, "SpecialFeatureCount": "0",
+		"CanDelete": "true", "EnableMediaSourceDisplay": "true", "LocalTrailerCount": "0", "LockData": "false", "PlayAccess": `"Full"`, "SpecialFeatureCount": "0",
 	} {
 		if got := string(wire[field]); got != want {
 			t.Errorf("detailed item %s %s = %s, want %s", id, field, got, want)

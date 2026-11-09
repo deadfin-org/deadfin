@@ -10,18 +10,25 @@ import (
 	"github.com/deadfin-org/deadfin/internal/config"
 	"github.com/deadfin-org/deadfin/internal/encoding"
 	"github.com/deadfin-org/deadfin/internal/ffmpeg"
+	"github.com/deadfin-org/deadfin/internal/images"
 	"github.com/deadfin-org/deadfin/internal/providers"
 )
 
 // newDynamicImages composes the Screen Grabber and the Embedded Image
 // Extractor. The extraction pool size is ParallelImageEncodingLimit, or the
-// processor count, read once at startup as MediaEncoder does.
-func newDynamicImages(manager *config.Manager, capabilities func() encoding.Capabilities, metadataPath string) *providers.DynamicImages {
+// processor count, read once at startup as MediaEncoder does. A nil collage
+// builder creates no library images.
+func newDynamicImages(manager *config.Manager, capabilities func() encoding.Capabilities, metadataPath string, collage *images.CollageBuilder) *providers.DynamicImages {
 	parallel := manager.System().ParallelImageEncodingLimit
 	if parallel < 1 {
 		parallel = runtime.NumCPU()
 	}
+	var collager providers.ThumbCollager
+	if collage != nil {
+		collager = collage
+	}
 	return providers.NewDynamicImages(providers.DynamicImagesOptions{
+		Collage:      collager,
 		Extractor:    ffmpeg.NewImageExtractor("ffmpeg", parallel),
 		MetadataPath: metadataPath,
 		Settings: func(itemType string) providers.DynamicImageSettings {

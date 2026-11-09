@@ -17,7 +17,7 @@ import (
 func TestServerIdentityFreshRootCreatesValidUUIDv4DeviceFile(t *testing.T) {
 	paths := mustPaths(t)
 
-	identity, err := config.LoadOrCreateServerIdentity(paths, "", "test-host", rand.Reader)
+	identity, err := config.LoadOrCreateServerIdentity(paths, "", rand.Reader)
 	if err != nil {
 		t.Fatalf("LoadOrCreateServerIdentity: %v", err)
 	}
@@ -25,11 +25,11 @@ func TestServerIdentityFreshRootCreatesValidUUIDv4DeviceFile(t *testing.T) {
 	if identity.ID.IsNil() {
 		t.Fatal("installation ID is nil")
 	}
-	if identity.ServerName != "test-host" {
-		t.Fatalf("ServerName = %q, want %q", identity.ServerName, "test-host")
+	if identity.ServerName != "Deadfin" {
+		t.Fatalf("ServerName = %q, want %q", identity.ServerName, "Deadfin")
 	}
-	if identity.Version != "12.0.0" {
-		t.Fatalf("Version = %q, want %q", identity.Version, "12.0.0")
+	if identity.Version != "12.1.0" {
+		t.Fatalf("Version = %q, want %q", identity.Version, "12.1.0")
 	}
 
 	path := filepath.Join(paths.Data, "device.txt")
@@ -56,11 +56,11 @@ func TestServerIdentityFreshRootCreatesValidUUIDv4DeviceFile(t *testing.T) {
 func TestServerIdentityReopenReturnsSameID(t *testing.T) {
 	paths := mustPaths(t)
 
-	first, err := config.LoadOrCreateServerIdentity(paths, "Configured", "host-a", rand.Reader)
+	first, err := config.LoadOrCreateServerIdentity(paths, "Configured", rand.Reader)
 	if err != nil {
 		t.Fatalf("first load: %v", err)
 	}
-	second, err := config.LoadOrCreateServerIdentity(paths, "Configured", "host-a", rand.Reader)
+	second, err := config.LoadOrCreateServerIdentity(paths, "Configured", rand.Reader)
 	if err != nil {
 		t.Fatalf("second load: %v", err)
 	}
@@ -73,11 +73,11 @@ func TestServerIdentitySecondRootReturnsDifferentID(t *testing.T) {
 	firstPaths := mustPaths(t)
 	secondPaths := mustPaths(t)
 
-	first, err := config.LoadOrCreateServerIdentity(firstPaths, "", "host-a", rand.Reader)
+	first, err := config.LoadOrCreateServerIdentity(firstPaths, "", rand.Reader)
 	if err != nil {
 		t.Fatalf("first root: %v", err)
 	}
-	second, err := config.LoadOrCreateServerIdentity(secondPaths, "", "host-b", rand.Reader)
+	second, err := config.LoadOrCreateServerIdentity(secondPaths, "", rand.Reader)
 	if err != nil {
 		t.Fatalf("second root: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestServerIdentityRetainsValidPreExistingDeviceFile(t *testing.T) {
 		t.Fatalf("write device.txt: %v", err)
 	}
 
-	identity, err := config.LoadOrCreateServerIdentity(paths, "Server", "host", rand.Reader)
+	identity, err := config.LoadOrCreateServerIdentity(paths, "Server", rand.Reader)
 	if err != nil {
 		t.Fatalf("LoadOrCreateServerIdentity: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestServerIdentityReplacesMalformedDeviceFile(t *testing.T) {
 		t.Fatalf("write device.txt: %v", err)
 	}
 
-	identity, err := config.LoadOrCreateServerIdentity(paths, "", "host", rand.Reader)
+	identity, err := config.LoadOrCreateServerIdentity(paths, "", rand.Reader)
 	if err != nil {
 		t.Fatalf("LoadOrCreateServerIdentity: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestServerIdentityReplacesNilGUIDDeviceFile(t *testing.T) {
 		t.Fatalf("write device.txt: %v", err)
 	}
 
-	identity, err := config.LoadOrCreateServerIdentity(paths, "", "host", rand.Reader)
+	identity, err := config.LoadOrCreateServerIdentity(paths, "", rand.Reader)
 	if err != nil {
 		t.Fatalf("LoadOrCreateServerIdentity: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestServerIdentityReplacesNilGUIDDeviceFile(t *testing.T) {
 func TestServerIdentityConfiguredNameWinsOverHostname(t *testing.T) {
 	paths := mustPaths(t)
 
-	identity, err := config.LoadOrCreateServerIdentity(paths, "My Server", "my-host", rand.Reader)
+	identity, err := config.LoadOrCreateServerIdentity(paths, "My Server", rand.Reader)
 	if err != nil {
 		t.Fatalf("LoadOrCreateServerIdentity: %v", err)
 	}
@@ -172,38 +172,38 @@ func TestServerIdentityConfiguredNameWinsOverHostname(t *testing.T) {
 	}
 }
 
-func TestServerIdentityEmptyConfiguredNameUsesHostname(t *testing.T) {
+func TestServerIdentityEmptyConfiguredNameUsesDefaultName(t *testing.T) {
 	paths := mustPaths(t)
 
-	identity, err := config.LoadOrCreateServerIdentity(paths, "", "fallback-host", rand.Reader)
+	identity, err := config.LoadOrCreateServerIdentity(paths, "", rand.Reader)
 	if err != nil {
 		t.Fatalf("LoadOrCreateServerIdentity: %v", err)
 	}
-	if identity.ServerName != "fallback-host" {
-		t.Fatalf("ServerName = %q, want %q", identity.ServerName, "fallback-host")
+	if identity.ServerName != "Deadfin" {
+		t.Fatalf("ServerName = %q, want %q", identity.ServerName, "Deadfin")
 	}
 }
 
-func TestServerIdentityWhitespaceOnlyConfiguredNameUsesHostname(t *testing.T) {
+func TestServerIdentityWhitespaceOnlyConfiguredNameUsesDefaultName(t *testing.T) {
 	paths := mustPaths(t)
 
-	identity, err := config.LoadOrCreateServerIdentity(paths, "   ", "whitespace-host", rand.Reader)
+	identity, err := config.LoadOrCreateServerIdentity(paths, "   ", rand.Reader)
 	if err != nil {
 		t.Fatalf("LoadOrCreateServerIdentity: %v", err)
 	}
-	if identity.ServerName != "whitespace-host" {
-		t.Fatalf("ServerName = %q, want %q", identity.ServerName, "whitespace-host")
+	if identity.ServerName != "Deadfin" {
+		t.Fatalf("ServerName = %q, want %q", identity.ServerName, "Deadfin")
 	}
 }
 
 func TestServerIdentityNameUpdateDoesNotChangeID(t *testing.T) {
 	paths := mustPaths(t)
 
-	first, err := config.LoadOrCreateServerIdentity(paths, "", "host-one", rand.Reader)
+	first, err := config.LoadOrCreateServerIdentity(paths, "", rand.Reader)
 	if err != nil {
 		t.Fatalf("first load: %v", err)
 	}
-	second, err := config.LoadOrCreateServerIdentity(paths, "New Name", "host-two", rand.Reader)
+	second, err := config.LoadOrCreateServerIdentity(paths, "New Name", rand.Reader)
 	if err != nil {
 		t.Fatalf("second load: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestServerIdentityUnwritableDataDirReturnsError(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(paths.Data, 0o700) })
 
-	_, err := config.LoadOrCreateServerIdentity(paths, "", "host", rand.Reader)
+	_, err := config.LoadOrCreateServerIdentity(paths, "", rand.Reader)
 	if err == nil {
 		t.Fatal("expected error for unwritable data dir, got nil")
 	}
@@ -248,7 +248,7 @@ func TestServerIdentityUnreadableDeviceFileReturnsError(t *testing.T) {
 		t.Fatalf("create device.txt as directory: %v", err)
 	}
 
-	_, err := config.LoadOrCreateServerIdentity(paths, "", "host", rand.Reader)
+	_, err := config.LoadOrCreateServerIdentity(paths, "", rand.Reader)
 	if err == nil {
 		t.Fatal("expected error for unreadable device.txt, got nil")
 	}
@@ -257,22 +257,10 @@ func TestServerIdentityUnreadableDeviceFileReturnsError(t *testing.T) {
 	}
 }
 
-func TestServerIdentityEmptyNameAndHostnameFailsValidation(t *testing.T) {
-	paths := mustPaths(t)
-
-	_, err := config.LoadOrCreateServerIdentity(paths, "", "", rand.Reader)
-	if err == nil {
-		t.Fatal("expected validation error for empty name and hostname, got nil")
-	}
-	if !strings.Contains(err.Error(), "server name is required") {
-		t.Fatalf("error = %q, want one that mentions server name is required", err.Error())
-	}
-}
-
 func TestServerIdentityFailingEntropyReaderReturnsError(t *testing.T) {
 	paths := mustPaths(t)
 
-	_, err := config.LoadOrCreateServerIdentity(paths, "Server", "host", errReader{})
+	_, err := config.LoadOrCreateServerIdentity(paths, "Server", errReader{})
 	if err == nil {
 		t.Fatal("expected error for failing entropy reader, got nil")
 	}
@@ -294,13 +282,13 @@ func TestServerIdentityDeterministicUUIDv4FromEntropy(t *testing.T) {
 	}
 	paths := mustPaths(t)
 
-	first, err := config.LoadOrCreateServerIdentity(paths, "", "host", bytes.NewReader(append(seed, make([]byte, 0)...)))
+	first, err := config.LoadOrCreateServerIdentity(paths, "", bytes.NewReader(append(seed, make([]byte, 0)...)))
 	if err != nil {
 		t.Fatalf("first deterministic load: %v", err)
 	}
 
 	secondPaths := mustPaths(t)
-	second, err := config.LoadOrCreateServerIdentity(secondPaths, "", "host", bytes.NewReader(append(seed, make([]byte, 0)...)))
+	second, err := config.LoadOrCreateServerIdentity(secondPaths, "", bytes.NewReader(append(seed, make([]byte, 0)...)))
 	if err != nil {
 		t.Fatalf("second deterministic load: %v", err)
 	}

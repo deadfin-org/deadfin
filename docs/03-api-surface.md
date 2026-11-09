@@ -94,7 +94,8 @@ degrades gracefully.
 
 **Swiftfin wire behaviors to honor** (from source, cited in the recon transcript):
 - Rejects servers whose `/System/Info/Public` lacks `ServerName` or `Id`; needs
-  `Version` populated (≥ 10.11 check).
+  `Version` populated. It warns when `Version` is below its SDK version
+  (12.1 in Swiftfin with jellyfin-sdk-swift 3.4.0; D-128).
 - `GET /QuickConnect/Enabled` body must be a **bare JSON boolean**.
 - Uses `MediaSourceInfo.TranscodingUrl` **verbatim**; it must carry
   `PlaySessionId` (Swiftfin throws without it) — and MediaSource selection is

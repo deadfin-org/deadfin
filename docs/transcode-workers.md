@@ -233,6 +233,9 @@ rolling update does not interrupt playback (D-121).
   `maxUnavailable: 0`, and a `terminationGracePeriodSeconds` of at least 30.
 - Point the workers and the clients at the Service.
 
+For a two-host layout with a floating IP, Caddy and PostgreSQL, see
+[reference architectures](alpha/reference-architectures.md#2-two-node-ha).
+
 A play session belongs to the replica that first serves its device, and a
 `PlaySessionId` grant and a remote job to the replica that made them. The
 other replicas forward the requests of that session, grant or job to the
