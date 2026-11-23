@@ -13,6 +13,20 @@ newest release or release candidate. `:latest` follows the newest release.
 
 ## [Unreleased]
 
+## [0.4.0-rc.4] - 2026-11-23
+
+Fourth release candidate for v0.4.0. It fixes a periodic stutter in HLS
+video copy of open-GOP sources. The image bundles deadfin-web v0.4.0-rc.1 at
+`/web/`, as rc.2. Tag `v0.4.0-rc.3` has no image on ghcr: its commit had no
+changelog section.
+
+### Fixed
+
+- HLS fMP4 video copy keeps the composition offset of a keyframe that starts
+  a segment (D-131, #915). Before, an open-GOP keyframe (Blu-ray H.264)
+  showed two frames early at each segment start. With keyframe cuts (D-72)
+  that was a visible tic about once a second.
+
 ## [0.4.0-rc.2] - 2026-11-09
 
 ### Added
@@ -459,7 +473,8 @@ First release candidate for v0.3.0, the community alpha.
 - The SQLite query for folder played counts uses a faster plan on large
   libraries.
 
-[Unreleased]: https://github.com/deadfin-org/deadfin/compare/v0.4.0-rc.2...HEAD
+[Unreleased]: https://github.com/deadfin-org/deadfin/compare/v0.4.0-rc.4...HEAD
+[0.4.0-rc.4]: https://github.com/deadfin-org/deadfin/compare/v0.4.0-rc.2...v0.4.0-rc.4
 [0.4.0-rc.2]: https://github.com/deadfin-org/deadfin/compare/v0.4.0-rc.1...v0.4.0-rc.2
 [0.4.0-rc.1]: https://github.com/deadfin-org/deadfin/compare/v0.3.1...v0.4.0-rc.1
 [0.3.1]: https://github.com/deadfin-org/deadfin/compare/v0.3.0...v0.3.1
