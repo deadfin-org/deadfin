@@ -631,10 +631,19 @@ func appendHLSOutputArgs(args []string, job HLSJob, caps Capabilities) []string 
 		if caps.EncoderMajorVersion > 0 && caps.EncoderMajorVersion < 5 {
 			option = "-hls_ts_options"
 		}
-		args = append(args, option, "movflags=+frag_discont")
+		// The HLS muxer sets the dash movflag. Without skip_sidx, the mov
+		// muxer then gives the first sample of each fragment the composition
+		// offset of the previous fragment (movenc.c mov_write_single_packet).
+		// An open-GOP keyframe that starts a segment then shows too early,
+		// one frame jump per segment; with keyframe cuts that is about once a
+		// second (D-131).
+		args = append(args, option, hlsFMP4MovFlags)
 	}
 	return append(args, "-y", job.OutputPath)
 }
+
+// hlsFMP4MovFlags are the movflags of each fMP4 segment.
+const hlsFMP4MovFlags = "movflags=+frag_discont+skip_sidx"
 
 // hlsTimeArg returns the muxer's target segment length. The HLS muxer cuts at
 // the first keyframe at least hls_time*n after the first packet of the

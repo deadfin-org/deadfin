@@ -21,7 +21,7 @@ func TestBuildHLSArgsMatchesGoldenCorpus(t *testing.T) {
 			if golden.Argv.HLS == "" {
 				t.Fatal("corpus row omits HLS argv")
 			}
-			want := splitFFmpegArgv(t, golden.Argv.HLS)
+			want := withD131MovFlags(splitFFmpegArgv(t, golden.Argv.HLS))
 			got, err := BuildHLSArgs(hlsJobFromGolden(t, golden), progressiveCapabilitiesFromGolden(golden.Capabilities))
 			if err != nil {
 				t.Fatalf("BuildHLSArgs: %v", err)
@@ -31,6 +31,18 @@ func TestBuildHLSArgsMatchesGoldenCorpus(t *testing.T) {
 			}
 		})
 	}
+}
+
+// withD131MovFlags applies D-131 to an upstream argv: fMP4 segments add
+// skip_sidx to the upstream movflags.
+func withD131MovFlags(argv []string) []string {
+	out := append([]string(nil), argv...)
+	for i := 1; i < len(out); i++ {
+		if (out[i-1] == "-hls_segment_options" || out[i-1] == "-hls_ts_options") && out[i] == "movflags=+frag_discont" {
+			out[i] = hlsFMP4MovFlags
+		}
+	}
+	return out
 }
 
 func TestBuildHLSArgsRejectsUnsafeOutputPaths(t *testing.T) {
@@ -181,8 +193,8 @@ func TestBuildHLSArgsPlacesFMP4SegmentOptionsAfterPlaylistFields(t *testing.T) {
 	if filename >= playlistType || playlistType >= listSize || listSize >= options || options >= output {
 		t.Fatalf("fMP4 option order is filename=%d playlist=%d list-size=%d options=%d output=%d; argv = %q", filename, playlistType, listSize, options, output, args)
 	}
-	if got := argumentValue(t, args, "-hls_segment_options"); got != "movflags=+frag_discont" {
-		t.Fatalf("fMP4 segment options = %q, want movflags=+frag_discont", got)
+	if got := argumentValue(t, args, "-hls_segment_options"); got != "movflags=+frag_discont+skip_sidx" {
+		t.Fatalf("fMP4 segment options = %q, want movflags=+frag_discont+skip_sidx", got)
 	}
 }
 
@@ -552,8 +564,8 @@ func TestBuildHLSArgsSelectsFMP4OptionForEncoderVersion(t *testing.T) {
 			caps.EncoderMajorVersion = test.version
 
 			args := mustBuildHLSArgsWithCaps(t, job, caps)
-			if got := argumentValue(t, args, test.flag); got != "movflags=+frag_discont" {
-				t.Fatalf("fMP4 %s = %q, want movflags=+frag_discont", test.flag, got)
+			if got := argumentValue(t, args, test.flag); got != "movflags=+frag_discont+skip_sidx" {
+				t.Fatalf("fMP4 %s = %q, want movflags=+frag_discont+skip_sidx", test.flag, got)
 			}
 		})
 	}

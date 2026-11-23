@@ -992,7 +992,7 @@ func TestHLSServiceFMP4SegmentJobUsesMP4PatternAndInitMinusOne(t *testing.T) {
 		"-hls_segment_filename", manager.lastRestart.SegmentPattern,
 		"-hls_playlist_type", "vod",
 		"-hls_list_size", "0",
-		"-hls_segment_options", "movflags=+frag_discont",
+		"-hls_segment_options", "movflags=+frag_discont+skip_sidx",
 		"-y", response.OutputPath,
 	) {
 		t.Errorf("HLS fMP4 argv = %q, want exact canonical init/start/segment/playlist/list/options/output order", manager.lastRestart.Args)

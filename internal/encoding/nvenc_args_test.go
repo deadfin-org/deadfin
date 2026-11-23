@@ -55,7 +55,7 @@ const (
 	cudaDevice  = "-init_hw_device cuda=cu:0 -filter_hw_device cu"
 	nvdecInput  = "-hwaccel cuda -hwaccel_output_format cuda -noautorotate -hwaccel_flags +unsafe_output -threads 1"
 	cudaTonemap = "tonemap_cuda=format=yuv420p:p=bt709:t=bt709:m=bt709:tonemap=bt2390:peak=100:desat=0"
-	fmp4Tail    = "-codec:a:0 copy -copyts -avoid_negative_ts disabled -max_muxing_queue_size 2048 -f hls -max_delay 5000000 -hls_time 3 -hls_segment_type fmp4 -hls_fmp4_init_filename abc-1.mp4 -start_number 0 -hls_segment_filename /cache/transcodes/abc%d.mp4 -hls_playlist_type vod -hls_list_size 0 -hls_segment_options movflags=+frag_discont -y /cache/transcodes/abc.m3u8"
+	fmp4Tail    = "-codec:a:0 copy -copyts -avoid_negative_ts disabled -max_muxing_queue_size 2048 -f hls -max_delay 5000000 -hls_time 3 -hls_segment_type fmp4 -hls_fmp4_init_filename abc-1.mp4 -start_number 0 -hls_segment_filename /cache/transcodes/abc%d.mp4 -hls_playlist_type vod -hls_list_size 0 -hls_segment_options movflags=+frag_discont+skip_sidx -y /cache/transcodes/abc.m3u8"
 )
 
 func TestBuildHLSArgsNvidiaGoldens(t *testing.T) {
